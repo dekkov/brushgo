@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#168e7c" />
+    <title>You're offline - Brushy</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+        background: #f0faf6;
+        color: #173c40;
+      }
+      body {
+        margin: 0;
+        min-height: 100svh;
+        display: grid;
+        place-items: center;
+      }
+      main {
+        max-width: 24rem;
+        padding: max(2rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right))
+          max(2rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
+        text-align: center;
+      }
+      p {
+        line-height: 1.6;
+      }
+      button {
+        font: inherit;
+        background: #168e7c;
+        color: white;
+        border: 0;
+        border-radius: 2rem;
+        padding: 0.8rem 1.5rem;
+        cursor: pointer;
+      }
+      button:focus-visible {
+        outline: 3px solid #173c40;
+        outline-offset: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Brushy needs a connection</h1>
+      <p>
+        Reconnect to the internet, then try again. Signing in, viewing check-ins, and saving selfies
+        are available online only.
+      </p>
+      <button type="button" onclick="window.location.reload()">Try again</button>
+      <p role="status" id="connection"></p>
+    </main>
+    <script>
+      function updateConnection() {
+        document.getElementById("connection").textContent = navigator.onLine
+          ? "Your device reports a connection. Try again to reach Brushy."
+          : "Your device is offline.";
+      }
+      window.addEventListener("online", updateConnection);
+      window.addEventListener("offline", updateConnection);
+      updateConnection();
+    </script>
+  </body>
+</html>

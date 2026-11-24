@@ -10,7 +10,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (loading) return <div className="min-h-screen" />;
   if (!user)
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-4 py-12">
+      <main className="flex min-h-svh flex-col items-center justify-center gap-8 px-4 py-12">
         <div className="max-w-md text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-fresh text-3xl shadow-soft">🪥</div>
           <h1 className="font-display text-4xl font-extrabold tracking-tight">Brushy</h1>
@@ -20,7 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </main>
     );
   return (
-    <div className="mx-auto min-h-screen max-w-2xl px-4 pb-24">
+    <div className="mx-auto min-h-svh max-w-2xl px-4 pb-24">
       <header className="flex items-center justify-between py-5">
         <Link to="/" className="font-display text-2xl font-extrabold">🪥 Brushy</Link>
         <nav className="flex items-center gap-1">

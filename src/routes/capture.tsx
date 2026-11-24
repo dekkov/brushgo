@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useOnline } from "@/hooks/useOnline";
 import { detect, isVerified, loadDetector, type Detection } from "@/lib/detector";
 import { createSelfieUpload } from "@/lib/selfie.functions";
 import { slotFor, toLocalDate } from "@/lib/streak";
@@ -30,9 +31,11 @@ export const Route = createFileRoute("/capture")({
 
 function Capture() {
   const { user } = useAuth();
+  const online = useOnline();
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [camError, setCamError] = useState<string | null>(null);
   const [modelReady, setModelReady] = useState(false);
@@ -40,6 +43,17 @@ function Capture() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [shot, setShot] = useState<{ blob: Blob; url: string; det: Detection } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!online) {
+      if (countdownRef.current !== null) clearInterval(countdownRef.current);
+      countdownRef.current = null;
+      setCountdown(null);
+    }
+    return () => {
+      if (countdownRef.current !== null) clearInterval(countdownRef.current);
+    };
+  }, [online]);
 
   // Camera stream
   useEffect(() => {
@@ -73,16 +87,29 @@ function Capture() {
   }, [modelReady, shot]);
 
   function startCountdown() {
+    if (!online) {
+      toast.error("Reconnect before taking a brushing selfie.");
+      return;
+    }
     let n = 3;
     setCountdown(n);
-    const id = setInterval(() => {
+    countdownRef.current = setInterval(() => {
       n--;
-      if (n === 0) { clearInterval(id); setCountdown(null); snap(); }
+      if (n === 0) {
+        if (countdownRef.current !== null) clearInterval(countdownRef.current);
+        countdownRef.current = null;
+        setCountdown(null);
+        snap();
+      }
       else setCountdown(n);
     }, 1000);
   }
 
   async function snap() {
+    if (!navigator.onLine) {
+      toast.error("Reconnect before taking a brushing selfie.");
+      return;
+    }
     const v = videoRef.current, c = canvasRef.current;
     if (!v || !c) return;
     c.width = v.videoWidth; c.height = v.videoHeight;
@@ -97,6 +124,10 @@ function Capture() {
 
   async function save() {
     if (!shot || !user) return;
+    if (!online) {
+      toast.error("Reconnect to save your selfie. Keep this page open to retain it.");
+      return;
+    }
     setSaving(true);
     const now = new Date();
     const local_date = toLocalDate(now);
@@ -157,7 +188,7 @@ function Capture() {
       {!shot ? (
         <button
           onClick={startCountdown}
-          disabled={!!camError || countdown !== null}
+          disabled={!online || !!camError || countdown !== null}
           className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-4 border-primary bg-card shadow-soft transition-transform active:scale-90 disabled:opacity-40"
           aria-label="Take selfie"
         >
@@ -168,7 +199,7 @@ function Capture() {
           <p className="flex items-center justify-center gap-2 font-semibold text-primary"><Sparkles className="h-5 w-5" /> Brushing detected!</p>
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={() => setShot(null)}><X className="h-4 w-4" />Retake</Button>
-            <Button className="flex-1" disabled={saving} onClick={save}>Log it</Button>
+            <Button className="flex-1" disabled={saving || !online} onClick={save}>Log it</Button>
           </div>
         </div>
       ) : (
@@ -178,7 +209,7 @@ function Capture() {
           </p>
           <div className="flex gap-2">
             <Button className="flex-1" onClick={() => setShot(null)}><RefreshCw className="h-4 w-4" />Retake</Button>
-            <Button variant="outline" className="flex-1" disabled={saving} onClick={save}>Confirm & log anyway</Button>
+            <Button variant="outline" className="flex-1" disabled={saving || !online} onClick={save}>Confirm & log anyway</Button>
           </div>
         </div>
       )}
