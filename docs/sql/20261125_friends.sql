@@ -60,6 +60,7 @@ create table brushy_private.photo_grants (
   friendship_id uuid not null references brushy_private.friendships(id) on delete cascade,
   primary key (brushing_id, friendship_id)
 );
+create index brushy_photo_grants_friendship on brushy_private.photo_grants (friendship_id);
 -- Retain used paths even after replacement/deletion: a previous upload is not a new capture.
 create table brushy_private.used_photo_paths (
   photo_path text primary key,
