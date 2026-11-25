@@ -416,6 +416,56 @@ try {
     },
   );
 
+  await check("owner deletion removes selected grants, feed access and streak credit", async () => {
+    const owner = await user("Deleting owner");
+    const viewer = await user("Deleting viewer");
+    const { friendship_id } = await befriend(owner, viewer);
+    const today = new Date().toISOString().slice(0, 10);
+    const options = {
+      local_date: today,
+      audience: "selected_friends",
+      friendship_ids: [friendship_id],
+    };
+    const morning = await save(owner.id, { ...options, slot: "am" });
+    await save(owner.id, { ...options, slot: "pm" });
+    assert.equal((await feed(viewer, { owner_id: owner.id })).owner!.streak, 1);
+    const foreignDelete = await asRole(
+      "authenticated",
+      viewer.id,
+      "delete from public.brushings where id=$1 returning id",
+      [morning.id],
+    );
+    assert.equal(foreignDelete.rows.length, 0);
+    const staleDelete = await asRole(
+      "authenticated",
+      owner.id,
+      "delete from public.brushings where id=$1 and revision=$2 returning id",
+      [morning.id, randomUUID()],
+    );
+    assert.equal(staleDelete.rows.length, 0);
+    assert.equal((await photo(viewer, morning)).owner_id, owner.id);
+    const removed = await asRole(
+      "authenticated",
+      owner.id,
+      "delete from public.brushings where user_id=$1 and id=$2 and revision=$3 returning id",
+      [owner.id, morning.id, morning.revision],
+    );
+    assert.equal(removed.rows.length, 1);
+    const grants = await db.query(
+      "select * from brushy_private.photo_grants where brushing_id=$1",
+      [morning.id],
+    );
+    assert.equal(grants.rows.length, 0);
+    await denied(() => photo(owner, morning), /Photo unavailable/);
+    await denied(() => photo(viewer, morning), /Photo unavailable/);
+    const after = await feed(viewer, { owner_id: owner.id });
+    assert.equal(
+      after.items.some((item) => item.id === morning.id),
+      false,
+    );
+    assert.equal(after.owner!.streak, 0);
+  });
+
   await check("blocking either way ends friendship/pending; unblock restores nothing", async () => {
     const shared = await save(alice.id, { local_date: "2026-01-05", audience: "all_friends" });
     await rpc(bob.id, "block", { user_id: alice.id });

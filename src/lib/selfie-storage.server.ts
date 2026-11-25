@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 function storage() {
@@ -45,4 +45,9 @@ export async function readSelfie(key: string, signal?: AbortSignal): Promise<Rea
   );
   if (!response.Body) throw new Error("Selfie storage returned an empty body");
   return response.Body.transformToWebStream();
+}
+
+export async function deleteSelfieObject(key: string): Promise<void> {
+  const { client, bucket } = storage();
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }

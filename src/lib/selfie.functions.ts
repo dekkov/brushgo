@@ -11,6 +11,15 @@ export const createSelfieUpload = createServerFn({ method: "POST" })
     return { path: s3PhotoPath(key), url: await signSelfieUpload(key) };
   });
 
+export const deleteSelfie = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator(z.object({ id: z.string().uuid(), revision: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    const { deleteOwnedSelfie } = await import("./selfie-delete.server");
+    await deleteOwnedSelfie(context.supabase, context.userId, data.id, data.revision);
+    return { ok: true };
+  });
+
 export const getSelfieUrls = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator(z.object({ ids: z.array(z.string().uuid()).max(1000) }))

@@ -28,8 +28,9 @@ export const Route = createFileRoute("/")({
 
 function Today() {
   const { user } = useAuth();
-  const { items } = useBrushings(user?.id);
+  const { items, reload } = useBrushings(user?.id);
   const [open, setOpen] = useState<Brushing | null>(null);
+  const onDeleted = () => { setOpen(null); void reload(); };
   const now = new Date();
   const today = toLocalDate(now);
   const streak = computeStreak(items, today);
@@ -87,8 +88,8 @@ function Today() {
           <Camera className="h-6 w-6" /> Brush & snap {current === "am" ? "morning" : "evening"} selfie
         </Link>
       )}
-      <FriendsFeed />
-      <SelfieDialog item={open} onClose={() => setOpen(null)} />
+      <FriendsFeed onDeleted={onDeleted} />
+      <SelfieDialog item={open} onClose={() => setOpen(null)} onDeleted={onDeleted} />
     </div>
   );
 }

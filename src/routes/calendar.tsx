@@ -27,7 +27,7 @@ export const Route = createFileRoute("/calendar")({
 
 function CalendarView() {
   const { user } = useAuth();
-  const { items } = useBrushings(user?.id);
+  const { items, reload } = useBrushings(user?.id);
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [day, setDay] = useState<string | null>(null);
   const [open, setOpen] = useState<Brushing | null>(null);
@@ -89,7 +89,7 @@ function CalendarView() {
           </div>
         </section>
       )}
-      <SelfieDialog item={open} onClose={() => setOpen(null)} />
+      <SelfieDialog item={open} onClose={() => setOpen(null)} onDeleted={() => { setOpen(null); void reload(); }} />
     </div>
   );
 }
