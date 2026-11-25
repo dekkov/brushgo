@@ -1,47 +1,99 @@
-# Friends database deployment
+# Turn on Friends in Brushy
 
-## Apply before the app
+Friends needs **two updates**: one in your Supabase database, then one to the
+Brushy app. This guide is for updating your existing app, not setting it up again.
+Your previously saved selfies stay private.
 
-1. Review `20261125_friends.sql` against your actual `public.brushings` schema and
-   owner-only SELECT/INSERT/UPDATE/DELETE RLS policies. The script assumes the
-   supplied UUID ID, `user_id`, `local_date`, `am`/`pm` slot, `photo_path`,
-   `verified`, `confidence`, `created_at`, and unique
-   `(user_id, local_date, slot)` constraint. It does not replace those policies.
-2. Schedule a **coordinated maintenance/deploy window**, pause capture traffic,
-   and warn users to finish or discard any capture before the window. Take a
-   database backup. Run the entire SQL file **once**, as the SQL editor owner in
-   Supabase, then **immediately deploy the compatible app**; do not leave the old
-   app serving normally against the new privileges. This is a reviewable
-   deployment script, not a generated migration or an instruction to mutate a
-   live database automatically. Its transaction rolls back on any error; it
-   deliberately fails instead of silently reapplying a partial/changed schema.
-3. Keep `brushy_private` out of PostgREST's exposed schemas. It has no
-   PUBLIC/anonymous/authenticated schema, table, or helper-function access
-   regardless. Only `public.brushy_social(text,jsonb)` is granted to
-   `authenticated`; no service-role key is needed in the app.
-4. Confirm the RPC is available through the normal authenticated Supabase client.
-   PostgREST normally reloads schema automatically; if needed, the SQL editor
-   owner can run `NOTIFY pgrst, 'reload schema';`. Missing schema/RPC errors are
-   deployment errors: do not fall back to direct writes, broad SELECT policies,
-   or fake success.
-5. Deploy the app using this RPC for **all** brushing inserts/replacements.
-   Existing brushing SELECT stays owner-only and owner DELETE remains available.
-   The migration clears old PUBLIC/anonymous/authenticated table and column
-   grants, then deliberately grants authenticated SELECT and DELETE only.
-   Direct authenticated INSERT/UPDATE, TRUNCATE, REFERENCES and TRIGGER
-   privileges are revoked. Older app versions which
-   directly upsert brushings must be updated/reloaded; do not restore these
-   grants as a compatibility workaround. Already-open web tabs and installed
-   PWA sessions can keep running that old code and will stop saving as soon as
-   the SQL commits. Explicitly tell users to **reload after deployment** before
-   resuming capture, and verify they receive the new app. There is **no
-   loss-proof upgrade promise for an unsaved selfie**: a reload can discard an
-   in-memory capture, and an in-flight save/upload may fail across the window.
-6. Smoke-test using two dedicated accounts: request/accept, each audience,
-   replacement, remove/re-add and block. Keep S3 private. The `photo` RPC returns
-   an internal owned S3 path only; the server must check this RPC on every image
-   request and stream bytes with `Cache-Control: private, no-store`, without
-   redirecting to a signed URL. Bypass service-worker/CDN image caching.
+> **Important:** After the database update, the old app cannot save check-ins.
+> Have the Friends app version ready to publish immediately afterward.
+> Pushing code to GitHub alone does not confirm that your website has updated.
+
+## Before you start
+
+- Have a current database backup and a way to restore it. If you cannot make or
+  restore a backup, stop before changing the live database.
+- Have the Friends app update ready to deploy using your existing hosting setup.
+  "Deploy" means publish the new version at your usual Brushy web address.
+- Before a live release, have the developer checks below completed on a separate
+  test database, including the privacy and simultaneous-request checks. The local
+  automated tests have **not** verified your live Supabase project.
+
+## Do these steps in order
+
+1. **Pause check-ins.** Ask users to finish saving or discard any current selfie,
+   then stop taking new ones until the update is finished. Reloading can lose an
+   unsaved selfie; an upload already in progress may also fail during the update.
+2. **Open the database update.** Sign in to the
+   [Supabase dashboard](https://supabase.com/dashboard) with your project-owner
+   account. Select the correct Brushy project, open **SQL Editor**, and create a
+   new query.
+3. **Run the Friends SQL once.** Open
+   [`20261125_friends.sql`](20261125_friends.sql), copy the **entire file** into
+   that query, and click **Run**. Do not use the old `0000_create_brushings.sql`
+   file. A successful result may say "Success. No rows returned."
+   **If you see an error, stop and share the error text, without passwords or
+   keys.** Do not run individual pieces or rerun a successful update.
+4. **Immediately publish the Friends app version.** Use your normal app
+   deployment process. Keep check-ins paused until that deployment finishes.
+5. **Reopen and check the app.** Close all Brushy tabs and installed-app windows,
+   then reopen Brushy at its usual address. You should see **Friends** in the
+   navigation. No reinstall is needed. Ask existing users to do the same before
+   they start taking selfies again.
+
+## Check it worked before inviting everyone
+
+Use two test accounts in separate browsers or browser profiles. In both accounts,
+choose a display name in **Friends**.
+
+| Try this | What you should see |
+| --- | --- |
+| Share an invite, send a request, then accept it | Both accounts show the friendship. |
+| Save an **Only me** selfie | Only its owner can see it. Previously saved selfies also remain private. |
+| Save an **All friends** selfie. Check it, then repeat with **Selected friends** choosing the other account. | After each save and refresh, the other account can see the current shared selfie. |
+| Retake a selfie in the same morning/evening slot | The new selfie replaces the old one; the old one disappears after refreshing. |
+| Remove the friendship, then add it again | Old **Selected friends** selfies stay hidden from the re-added friend. |
+| Block the friend and refresh both accounts | Shared history is no longer accessible in either direction. |
+
+If anything fails, keep check-ins paused and share what happened. **Do not
+delete tables, rerun the update, or loosen database permissions to fix it.**
+Returning to the old app also needs a careful database rollback; it is not just
+an app redeploy. Already-viewed photos or screenshots cannot be taken back.
+
+<details>
+<summary>Developer reference: permissions, API, testing, and rollback</summary>
+
+## Database and server requirements
+
+Review the SQL against the actual `public.brushings` schema and owner-only
+SELECT/INSERT/UPDATE/DELETE RLS policies before applying it. It assumes UUID ID,
+`user_id`, `local_date`, `am`/`pm` slot, `photo_path`, `verified`, `confidence`,
+`created_at`, and unique `(user_id, local_date, slot)`. It does not replace the
+existing RLS policies. The update runs in a transaction that rolls back on any
+error and deliberately fails instead of silently reapplying a partial/changed
+schema.
+
+Keep `brushy_private` out of PostgREST's exposed schemas. It has no
+PUBLIC/anonymous/authenticated schema, table, or helper-function access.
+Only `public.brushy_social(text,jsonb)` is granted to `authenticated`; no
+service-role key is needed in the app.
+
+Confirm that the RPC is available through the normal authenticated Supabase
+client. PostgREST normally reloads its schema automatically; if needed, the SQL
+editor owner can run `NOTIFY pgrst, 'reload schema';`. Missing schema/RPC errors
+are deployment errors: do not fall back to direct writes, broad SELECT policies,
+or fake success.
+
+The compatible app must use the RPC for **all** brushing inserts/replacements.
+The migration clears old PUBLIC/anonymous/authenticated table and column grants,
+then grants authenticated SELECT and DELETE only. Existing brushing SELECT
+stays owner-only and owner DELETE remains available. Direct authenticated
+INSERT/UPDATE, TRUNCATE, REFERENCES and TRIGGER privileges are revoked; restoring
+them for old clients would bypass the sharing rules.
+
+Keep S3 private. The `photo` RPC returns an internal owned S3 path only; the
+server must check this RPC on every image request and stream bytes with
+`Cache-Control: private, no-store`, without redirecting to a signed URL. Bypass
+service-worker/CDN image caching.
 
 Existing captures receive `only_me`, independent revision UUIDs and capture
 timestamps initialized from `created_at` (server time if it was null). There is
@@ -213,3 +265,5 @@ is intentional; establish retention/cleanup separately without weakening the
 throttle. `used_photo_paths` deliberately outlives captures. User deletion
 cascades private social state through `auth.users`; account-deletion/object
 retention remains the existing application's responsibility.
+
+</details>
