@@ -2,11 +2,13 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/capture";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   upload: vi.fn(),
   upsert: vi.fn().mockResolvedValue({ error: null }),
+  social: { profile: null, friends: [] },
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -23,12 +25,25 @@ vi.mock("@/lib/detector", () => ({
   isVerified: () => true,
 }));
 vi.mock("@/lib/selfie.functions", () => ({ createSelfieUpload: mocks.upload }));
+vi.mock("@/lib/social.functions", () => ({
+  socialAction: (...args: unknown[]) => mocks.upsert(...args),
+}));
+vi.mock("@/hooks/useSocial", () => ({
+  useSocial: () => ({ data: mocks.social, isPending: false, isError: false, refetch: vi.fn() }),
+}));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: () => ({ upsert: mocks.upsert }) },
 }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
 
-const Page = Route.options.component!;
+const CapturePage = Route.options.component!;
+function Page() {
+  return (
+    <QueryClientProvider client={new QueryClient()}>
+      <CapturePage />
+    </QueryClientProvider>
+  );
+}
 const originalGetContext = Object.getOwnPropertyDescriptor(
   HTMLCanvasElement.prototype,
   "getContext",

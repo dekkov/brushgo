@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { CalendarDays, Home, LogOut } from "lucide-react";
+import { CalendarDays, Home, LogOut, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { AuthCard } from "./AuthCard";
@@ -26,6 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="flex items-center gap-1">
           <Link to="/" className="rounded-full p-2 text-muted-foreground hover:bg-secondary" activeProps={{ className: "text-primary" }} aria-label="Home"><Home className="h-5 w-5" /></Link>
           <Link to="/calendar" className="rounded-full p-2 text-muted-foreground hover:bg-secondary" activeProps={{ className: "text-primary" }} aria-label="Calendar"><CalendarDays className="h-5 w-5" /></Link>
+          <Link to="/friends" className="rounded-full p-2 text-muted-foreground hover:bg-secondary" activeProps={{ className: "text-primary" }} aria-label="Friends"><Users className="h-5 w-5" /></Link>
           <button onClick={() => supabase.auth.signOut()} className="rounded-full p-2 text-muted-foreground hover:bg-secondary" aria-label="Sign out"><LogOut className="h-5 w-5" /></button>
         </nav>
       </header>

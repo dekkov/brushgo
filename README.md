@@ -53,7 +53,7 @@ Supabase secret/service-role keys are not needed. Store AWS credentials in Verce
 ## Setup and deployment
 
 1. Create a general-purpose S3 bucket with ACLs disabled, Block Public Access enabled, and default encryption. Create a dedicated IAM user whose policy grants only `s3:GetObject` and `s3:PutObject` on `arn:aws:s3:::YOUR_BUCKET/*`. Create an access key for that user; AWS storage and request charges may apply.
-2. Create a new Supabase project. This is a fresh start: accounts, streaks and selfies in Lovable Cloud are not migrated or deleted. Per the project rules in `AGENTS.md`, ask Lovable to create the `brushings` table and user-isolation RLS policies in the new project. The existing schema is documented in `drizzle/migrations/0000_create_brushings.sql`; do not apply the old Supabase Storage policies to the new project.
+2. Use your Supabase project with the existing owner-isolated `brushings` table. Before deploying Friends, review and apply the SQL using the [Friends deployment guide](docs/sql/friends-deployment.md). Database changes are managed directly in Supabase, not through Lovable. Do not copy legacy Supabase Storage policies into the S3-backed setup.
 3. Configure the environment variables above in Vercel for production. The `VITE_` variables are public; the AWS credentials must be sensitive server-side variables. Link a Vercel project with `npx vercel link`, and deploy with `npx vercel --prod`. Vercel detects the app's TanStack Start and Nitro configuration.
 4. Configure Supabase Auth's site URL and redirect allowlist for the exact production origin and trusted local/preview origins. In Google Cloud, configure the OAuth consent screen and a web OAuth client. Add the Supabase Google provider's callback URL as an authorized redirect URI, and enter the Google client ID and secret in Supabase's Google provider settings. Google may restrict sign-in to test users until the app is published.
 5. In S3 bucket **Permissions → Cross-origin resource sharing (CORS)**, allow the exact origins that will upload. For example, replace the production origin and local port below:
@@ -72,3 +72,19 @@ Supabase secret/service-role keys are not needed. Store AWS credentials in Verce
 6. Redeploy after changing Vercel environment variables. Verify email and Google sign-in, capture, saving, reloading, calendar display and isolation between two user accounts.
 
 Use only trusted preview origins in the Supabase redirect allowlist and S3 CORS. Do not expose a public bucket. The server verifies the signed-in user before generating upload URLs and looks up owned database records before generating read URLs. Upload URLs expire after five minutes and read URLs after one hour. Replacing a check-in or a failed database save can leave an unreferenced S3 object; automatic deletion is not implemented. Do not apply a blanket expiration policy unless deleting retained selfies is intended.
+
+## Friends
+
+Choose a display name in **Friends**, then share a reusable invite link/code. An invite does not grant photo access: friendship requires acceptance and each person can have five friends. Pending requests do not reserve a place. A sender sees Pending; a recipient can Accept/Decline. Declines permit another request immediately, except for rapid-attempt throttling. Reset an invite to invalidate old links without removing friends or pending requests.
+
+Every new selfie has an audience: **Only me**, **All friends**, or **Selected friends**. Brushy remembers your last choice, initially Only me. All friends includes future friends and your past All friends selfies. Selected friends refers to those specific friendships: removing and re-adding a person does not restore selected-only access. Saved audiences cannot be edited; retaking the same morning/evening slot replaces that selfie with a new capture, audience, and feed position. Existing photos remain private when the SQL is applied.
+
+The home feed combines your own selfies and friends' authorized selfies. Friend profiles show their shared history; the personal calendar is unchanged. Names use initials avatars, and a friend's current overall streak includes private check-ins without revealing their details. Refresh is manual, on opening, or on returning to the app; there is no realtime feed, offline queue, chat, reactions, notifications, or widget.
+
+Removing or blocking someone ends new access to their shared photos. Blocking also prevents requests; unblocking does not restore friendship. Photos in the shared feed are fetched with the current session and streamed through Brushy's server with `private, no-store` headers, not sent as reusable S3 URLs. This adds server bandwidth/S3 reads. Previously seen images or screenshots cannot be recalled. The service worker never caches photo responses.
+
+The Lovable-provided build preset and working runtime integrations remain in place; only obsolete project-ownership and setup instructions have been removed.
+
+Run `npm test` for component/server tests and `npm run test:db` (Node.js 22.6+) for isolated SQL/RLS checks using PGlite. These do not contact production. PGlite's single connection does not validate multi-session races; run the documented concurrency acceptance checks on a disposable Supabase/PostgreSQL project before rollout.
+
+Coordinate the SQL and app deployment: the migration disables the old direct check-in write path to enforce sharing invariants. Already-open old app versions must refresh after the compatible app is deployed. Keep production credentials and private selfies out of test fixtures.

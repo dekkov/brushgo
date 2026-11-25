@@ -6,6 +6,7 @@ import { SelfieDialog } from "@/components/SelfieDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useBrushings, type Brushing } from "@/hooks/useBrushings";
 import { computeStreak, slotFor, toLocalDate, type Slot } from "@/lib/streak";
+import { FriendsFeed } from "@/components/FriendsFeed";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -72,9 +73,12 @@ function Today() {
       </section>
 
       {done ? (
-        <p className="rounded-[var(--radius)] bg-secondary p-4 text-center font-medium">
-          {current === "am" ? "Morning done! See you tonight 🌙" : "All done for today. Sweet dreams ✨"}
-        </p>
+        <div className="space-y-3">
+          <p className="rounded-[var(--radius)] bg-secondary p-4 text-center font-medium">
+            {current === "am" ? "Morning done! See you tonight 🌙" : "All done for today. Sweet dreams ✨"}
+          </p>
+          <Link to="/capture" className="block text-center text-sm underline">Retake {current === "am" ? "morning" : "evening"} selfie</Link>
+        </div>
       ) : (
         <Link
           to="/capture"
@@ -83,6 +87,7 @@ function Today() {
           <Camera className="h-6 w-6" /> Brush & snap {current === "am" ? "morning" : "evening"} selfie
         </Link>
       )}
+      <FriendsFeed />
       <SelfieDialog item={open} onClose={() => setOpen(null)} />
     </div>
   );

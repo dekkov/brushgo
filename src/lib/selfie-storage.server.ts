@@ -36,3 +36,13 @@ export async function signSelfieReads(keys: string[]): Promise<string[]> {
     ),
   );
 }
+
+export async function readSelfie(key: string, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>> {
+  const { client, bucket } = storage();
+  const response = await client.send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    signal ? { abortSignal: signal } : undefined,
+  );
+  if (!response.Body) throw new Error("Selfie storage returned an empty body");
+  return response.Body.transformToWebStream();
+}
