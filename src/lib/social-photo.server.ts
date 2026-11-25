@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { socialInputSchema } from "@/lib/social";
 import { SocialError, socialRpc } from "@/lib/social-rpc.server";
-import { s3PhotoKey } from "@/lib/selfie-path";
+import { isOwnedLegacyPhotoPath, s3PhotoKey } from "@/lib/selfie-path";
 import { readSelfie } from "@/lib/selfie-storage.server";
 
 const permissionSchema = z.object({ photo_path: z.string(), owner_id: z.string().uuid() });
@@ -13,10 +13,7 @@ const headers = {
 
 async function readLegacyPhoto(request: Request, path: string, ownerId: string) {
   const segments = path.split("/");
-  if (
-    segments[0] !== ownerId ||
-    segments.some((segment) => !segment || segment === "." || segment === "..")
-  ) {
+  if (!isOwnedLegacyPhotoPath(path, ownerId)) {
     throw new SocialError("This photo is unavailable.", 404);
   }
   const url = process.env["SUPABASE_URL"];

@@ -1,5 +1,14 @@
 const S3_PREFIX = "s3:";
 
+export function isOwnedLegacyPhotoPath(path: string, userId: string): boolean {
+  const segments = path.split("/");
+  return (
+    segments[0] === userId &&
+    segments.length > 1 &&
+    segments.every((segment) => segment !== "" && segment !== "." && segment !== "..")
+  );
+}
+
 export function s3PhotoPath(key: string): string {
   return `${S3_PREFIX}${key}`;
 }

@@ -7,13 +7,14 @@ import { useOnline } from "@/hooks/useOnline";
 import { feedSchema, initials } from "@/lib/social";
 import { socialAction } from "@/lib/social.functions";
 import { PrivateSelfie } from "@/components/PrivateSelfie";
+import { DeleteSelfieButton } from "@/components/DeleteSelfieButton";
 import { Button } from "@/components/ui/button";
 import { z } from "zod";
 import { cursorSchema } from "@/lib/social";
 
 type Cursor = z.infer<typeof cursorSchema> | undefined;
 
-export function FriendsFeed({ ownerId }: { ownerId?: string }) {
+export function FriendsFeed({ ownerId, onDeleted }: { ownerId?: string; onDeleted?: () => void }) {
   const { user } = useAuth();
   const online = useOnline();
   const feed = useInfiniteQuery({
@@ -128,13 +129,16 @@ export function FriendsFeed({ ownerId }: { ownerId?: string }) {
                 alt={`${item.display_name || "Your"} brushing selfie`}
               />
               {item.owner_id === user.id && (
-                <p className="text-xs text-muted-foreground">
-                  {item.audience === "only_me"
-                    ? "Only you"
-                    : item.audience === "all_friends"
-                      ? "Shared with all friends"
-                      : "Shared with selected friends"}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    {item.audience === "only_me"
+                      ? "Only you"
+                      : item.audience === "all_friends"
+                        ? "Shared with all friends"
+                        : "Shared with selected friends"}
+                  </p>
+                  <DeleteSelfieButton id={item.id} revision={item.revision} onDeleted={onDeleted} />
+                </div>
               )}
             </article>
           ))}

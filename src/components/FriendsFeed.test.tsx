@@ -5,6 +5,7 @@ import { FriendsFeed } from "./FriendsFeed";
 
 const mocks = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock("@/lib/social.functions", () => ({ socialAction: mocks.action }));
+vi.mock("@/lib/selfie.functions", () => ({ deleteSelfie: vi.fn() }));
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ user: { id: "11111111-1111-4111-8111-111111111111" } }),
 }));
@@ -57,9 +58,11 @@ describe("combined selfie feed", () => {
     show();
     expect(await screen.findByText("Ada")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete selfie" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Load older selfies" }));
     expect(await screen.findByText("Me · You")).toBeInTheDocument();
     expect(screen.getByText("Only you")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Delete selfie" })).toHaveLength(1);
     expect(mocks.action).toHaveBeenLastCalledWith({ data: { action: "feed", data: { cursor } } });
     expect(screen.queryByRole("button", { name: "Load older selfies" })).not.toBeInTheDocument();
   });

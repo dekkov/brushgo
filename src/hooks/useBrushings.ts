@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 export interface Brushing {
   id: string;
+  revision: string;
   local_date: string;
   slot: Slot;
   photo_path: string;
@@ -25,14 +26,15 @@ export function useBrushings(userId: string | undefined) {
       .select("*")
       .eq("user_id", userId)
       .order("local_date", { ascending: false })
-      .limit(1000);
+      .limit(1000)
+      .overrideTypes<Brushing[], { merge: false }>();
     if (error) {
       console.error("Could not load brushings", error);
       toast.error("Could not load your check-ins.");
       setLoading(false);
       return;
     }
-    const rows = (data ?? []) as Brushing[];
+    const rows = data ?? [];
     if (rows.length) {
       const legacy = rows.filter((row) => !row.photo_path.startsWith("s3:"));
       const s3 = rows.filter((row) => row.photo_path.startsWith("s3:"));

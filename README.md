@@ -52,7 +52,7 @@ Supabase secret/service-role keys are not needed. Store AWS credentials in Verce
 
 ## Setup and deployment
 
-1. Create a general-purpose S3 bucket with ACLs disabled, Block Public Access enabled, and default encryption. Create a dedicated IAM user whose policy grants only `s3:GetObject` and `s3:PutObject` on `arn:aws:s3:::YOUR_BUCKET/*`. Create an access key for that user; AWS storage and request charges may apply.
+1. Create a general-purpose S3 bucket with ACLs disabled, Block Public Access enabled, and default encryption. Create a dedicated IAM user whose policy grants only `s3:GetObject`, `s3:PutObject`, and `s3:DeleteObject` on `arn:aws:s3:::YOUR_BUCKET/*`. Create an access key for that user; AWS storage and request charges may apply.
 2. Use your Supabase project with the existing owner-isolated `brushings` table. Before deploying Friends, review and apply the SQL using the [Friends deployment guide](docs/sql/friends-deployment.md). Database changes are managed directly in Supabase, not through Lovable. Do not copy legacy Supabase Storage policies into the S3-backed setup.
 3. Configure the environment variables above in Vercel for production. The `VITE_` variables are public; the AWS credentials must be sensitive server-side variables. Link a Vercel project with `npx vercel link`, and deploy with `npx vercel --prod`. Vercel detects the app's TanStack Start and Nitro configuration.
 4. Configure Supabase Auth's site URL and redirect allowlist for the exact production origin and trusted local/preview origins. In Google Cloud, configure the OAuth consent screen and a web OAuth client. Add the Supabase Google provider's callback URL as an authorized redirect URI, and enter the Google client ID and secret in Supabase's Google provider settings. Google may restrict sign-in to test users until the app is published.
@@ -71,7 +71,15 @@ Supabase secret/service-role keys are not needed. Store AWS credentials in Verce
 
 6. Redeploy after changing Vercel environment variables. Verify email and Google sign-in, capture, saving, reloading, calendar display and isolation between two user accounts.
 
-Use only trusted preview origins in the Supabase redirect allowlist and S3 CORS. Do not expose a public bucket. The server verifies the signed-in user before generating upload URLs and looks up owned database records before generating read URLs. Upload URLs expire after five minutes and read URLs after one hour. Replacing a check-in or a failed database save can leave an unreferenced S3 object; automatic deletion is not implemented. Do not apply a blanket expiration policy unless deleting retained selfies is intended.
+Use only trusted preview origins in the Supabase redirect allowlist and S3 CORS. Do not expose a public bucket. The server verifies the signed-in user before generating upload URLs and looks up owned database records before generating read URLs. Upload URLs expire after five minutes and read URLs after one hour. Replacing a check-in or a failed database save can leave an unreferenced S3 object; automatic cleanup of these orphaned objects is not implemented. Do not apply a blanket expiration policy unless deleting retained selfies is intended.
+
+### Delete a selfie
+
+Open your selfie from today's check-ins or the calendar, or use **Delete selfie** on your own feed card. Confirming deletes the current stored image and its morning/evening check-in; the calendar, feed, and streak update afterward. You cannot delete someone else's selfie. Deleting a check-in also removes its selected-friend permissions.
+
+Existing deployments must add `s3:DeleteObject` to the app's IAM policy for the same private bucket before enabling deletion. No additional Supabase migration beyond the Friends setup, or public bucket access, is required. Older Supabase Storage photos use the existing owner-delete policy instead. The server checks ownership and the exact photo revision, deletes storage first, then removes only that revision's check-in. If storage deletion fails, the check-in remains and the app shows an error. If removing the check-in fails after storage succeeds, the app explicitly asks you to retry; storage deletion can be retried if the object is already absent.
+
+Deletion is not an erase of screenshots, already-delivered bytes, backups, or retained object versions. With S3 versioning or Object Lock, old versions follow the bucket's retention settings; this action deletes the current object, not all historical versions.
 
 ## Friends
 

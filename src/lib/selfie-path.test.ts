@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { s3PhotoKey, s3PhotoPath } from "./selfie-path";
+import { isOwnedLegacyPhotoPath, s3PhotoKey, s3PhotoPath } from "./selfie-path";
 
 describe("selfie storage paths", () => {
   const user = "2eb4f214-454f-4955-84c6-1835b1588485";
@@ -14,5 +14,12 @@ describe("selfie storage paths", () => {
     expect(() => s3PhotoKey(s3PhotoPath(key), "someone-else")).toThrow();
     expect(() => s3PhotoKey(s3PhotoPath(`${user}/../other.jpg`), user)).toThrow();
     expect(() => s3PhotoKey(s3PhotoPath(`${user}/anything.jpg`), user)).toThrow();
+  });
+
+  it("accepts only owned legacy object paths without traversal or empty segments", () => {
+    expect(isOwnedLegacyPhotoPath(`${user}/old.jpg`, user)).toBe(true);
+    for (const path of [`other/old.jpg`, `${user}/../old.jpg`, `${user}//old.jpg`, user]) {
+      expect(isOwnedLegacyPhotoPath(path, user)).toBe(false);
+    }
   });
 });
