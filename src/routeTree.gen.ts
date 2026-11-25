@@ -12,6 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as CaptureRouteImport } from './routes/capture'
+import { Route as FriendsRouteImport } from './routes/friends'
+import { Route as FriendsIndexRouteImport } from './routes/friends.index'
+import { Route as FriendsUserIdRouteImport } from './routes/friends.$userId'
+import { Route as ApiSelfiesIdRouteImport } from './routes/api.selfies.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +32,89 @@ const CaptureRoute = CaptureRouteImport.update({
   path: '/capture',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FriendsRoute = FriendsRouteImport.update({
+  id: '/friends',
+  path: '/friends',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FriendsIndexRoute = FriendsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => FriendsRoute,
+} as any)
+const FriendsUserIdRoute = FriendsUserIdRouteImport.update({
+  id: '/$userId',
+  path: '/$userId',
+  getParentRoute: () => FriendsRoute,
+} as any)
+const ApiSelfiesIdRoute = ApiSelfiesIdRouteImport.update({
+  id: '/api/selfies/$id',
+  path: '/api/selfies/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/capture': typeof CaptureRoute
+  '/friends': typeof FriendsRouteWithChildren
+  '/friends/$userId': typeof FriendsUserIdRoute
+  '/friends/': typeof FriendsIndexRoute
+  '/api/selfies/$id': typeof ApiSelfiesIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/capture': typeof CaptureRoute
+  '/friends/$userId': typeof FriendsUserIdRoute
+  '/friends': typeof FriendsIndexRoute
+  '/api/selfies/$id': typeof ApiSelfiesIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/capture': typeof CaptureRoute
+  '/friends': typeof FriendsRouteWithChildren
+  '/friends/$userId': typeof FriendsUserIdRoute
+  '/friends/': typeof FriendsIndexRoute
+  '/api/selfies/$id': typeof ApiSelfiesIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/calendar' | '/capture'
+  fullPaths:
+    | '/'
+    | '/calendar'
+    | '/capture'
+    | '/friends'
+    | '/friends/$userId'
+    | '/friends/'
+    | '/api/selfies/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/calendar' | '/capture'
-  id: '__root__' | '/' | '/calendar' | '/capture'
+  to:
+    | '/'
+    | '/calendar'
+    | '/capture'
+    | '/friends/$userId'
+    | '/friends'
+    | '/api/selfies/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/calendar'
+    | '/capture'
+    | '/friends'
+    | '/friends/$userId'
+    | '/friends/'
+    | '/api/selfies/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CalendarRoute: typeof CalendarRoute
   CaptureRoute: typeof CaptureRoute
+  FriendsRoute: typeof FriendsRouteWithChildren
+  ApiSelfiesIdRoute: typeof ApiSelfiesIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,13 +140,56 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CaptureRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/friends': {
+      id: '/friends'
+      path: '/friends'
+      fullPath: '/friends'
+      preLoaderRoute: typeof FriendsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/friends/': {
+      id: '/friends/'
+      path: '/'
+      fullPath: '/friends/'
+      preLoaderRoute: typeof FriendsIndexRouteImport
+      parentRoute: typeof FriendsRoute
+    }
+    '/friends/$userId': {
+      id: '/friends/$userId'
+      path: '/$userId'
+      fullPath: '/friends/$userId'
+      preLoaderRoute: typeof FriendsUserIdRouteImport
+      parentRoute: typeof FriendsRoute
+    }
+    '/api/selfies/$id': {
+      id: '/api/selfies/$id'
+      path: '/api/selfies/$id'
+      fullPath: '/api/selfies/$id'
+      preLoaderRoute: typeof ApiSelfiesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
+
+interface FriendsRouteChildren {
+  FriendsUserIdRoute: typeof FriendsUserIdRoute
+  FriendsIndexRoute: typeof FriendsIndexRoute
+}
+
+const FriendsRouteChildren: FriendsRouteChildren = {
+  FriendsUserIdRoute: FriendsUserIdRoute,
+  FriendsIndexRoute: FriendsIndexRoute,
+}
+
+const FriendsRouteWithChildren =
+  FriendsRoute._addFileChildren(FriendsRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CalendarRoute: CalendarRoute,
   CaptureRoute: CaptureRoute,
+  FriendsRoute: FriendsRouteWithChildren,
+  ApiSelfiesIdRoute: ApiSelfiesIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

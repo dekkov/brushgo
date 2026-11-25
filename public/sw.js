@@ -2,7 +2,7 @@
 const CACHE_PREFIX = "brushy-offline-";
 const CACHE_NAME = `${CACHE_PREFIX}v1`;
 const OFFLINE_URL = "/offline.html";
-const APP_PATHS = new Set(["/", "/calendar", "/capture"]);
+const APP_PATHS = new Set(["/", "/calendar", "/capture", "/friends"]);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -34,7 +34,7 @@ self.addEventListener("fetch", (event) => {
     request.method !== "GET" ||
     request.mode !== "navigate" ||
     url.origin !== self.location.origin ||
-    !APP_PATHS.has(url.pathname) ||
+    !(APP_PATHS.has(url.pathname) || /^\/friends\/[0-9a-f-]{36}$/i.test(url.pathname)) ||
     url.search
   )
     return;

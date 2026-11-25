@@ -4,12 +4,16 @@ import { toast } from "sonner";
 import { RefreshCw, Sparkles, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnline } from "@/hooks/useOnline";
 import { detect, isVerified, loadDetector, type Detection } from "@/lib/detector";
 import { createSelfieUpload } from "@/lib/selfie.functions";
 import { slotFor, toLocalDate } from "@/lib/streak";
+import { AudiencePicker } from "@/components/AudiencePicker";
+import { useSocial } from "@/hooks/useSocial";
+import { currentTimeZone, rememberedAudience, type Audience } from "@/lib/social";
+import { socialAction } from "@/lib/social.functions";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/capture")({
   head: () => ({
@@ -33,6 +37,8 @@ function Capture() {
   const { user } = useAuth();
   const online = useOnline();
   const navigate = useNavigate();
+  const social = useSocial();
+  const queryClient = useQueryClient();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -43,6 +49,19 @@ function Capture() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [shot, setShot] = useState<{ blob: Blob; url: string; det: Detection } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [audience, setAudience] = useState<Audience>("only_me");
+  const [friendshipIds, setFriendshipIds] = useState<string[]>([]);
+  const [audienceChosen, setAudienceChosen] = useState(false);
+  const availableIds = new Set(social.data?.friends.map((friend) => friend.friendship_id) ?? []);
+  const effectiveIds = friendshipIds.filter((id) => availableIds.has(id));
+  const audienceReady = !!social.data && (audience !== "selected_friends" || effectiveIds.length > 0);
+
+  useEffect(() => {
+    if (!social.data || audienceChosen) return;
+    const remembered = rememberedAudience(social.data);
+    setAudience(remembered.audience);
+    setFriendshipIds(remembered.friendshipIds);
+  }, [social.data, audienceChosen]);
 
   useEffect(() => {
     if (!online) {
@@ -128,6 +147,10 @@ function Capture() {
       toast.error("Reconnect to save your selfie. Keep this page open to retain it.");
       return;
     }
+    if (!audienceReady) {
+      toast.error("Choose an available audience before saving.");
+      return;
+    }
     setSaving(true);
     const now = new Date();
     const local_date = toLocalDate(now);
@@ -141,15 +164,18 @@ function Capture() {
       });
       if (!upload.ok) throw new Error("Could not upload your selfie. Please try again.");
       const verified = isVerified(shot.det);
-      const { error } = await supabase.from("brushings").upsert(
-        { user_id: user.id, local_date, slot, photo_path: path, verified, confidence: shot.det.toothbrush },
-        { onConflict: "user_id,local_date,slot" },
-      );
-      if (error) throw error;
+      await socialAction({ data: { action: "save", data: {
+        local_date, slot, photo_path: path, verified, confidence: shot.det.toothbrush,
+        audience, friendship_ids: audience === "selected_friends" ? effectiveIds : [],
+        time_zone: currentTimeZone(),
+      } } });
+      await queryClient.invalidateQueries({ queryKey: ["social"] });
+      await queryClient.resetQueries({ queryKey: ["feed"] });
       toast.success(verified ? "Verified brushing logged ✨" : "Check-in logged!");
       navigate({ to: "/" });
     } catch (error) {
       console.error("Could not save brushing", error);
+      void social.refetch();
       toast.error("Could not save your check-in. Please try again.");
     } finally {
       setSaving(false);
@@ -184,6 +210,16 @@ function Capture() {
         )}
       </div>
       <canvas ref={canvasRef} className="hidden" />
+      {shot && (
+        <>
+          {social.isError && <p role="alert" className="rounded-xl bg-secondary p-4">{social.error.message}<button className="ml-2 underline" onClick={() => void social.refetch()}>Retry</button></p>}
+          {social.isPending ? <p role="status">Loading sharing preferences…</p> : (
+            <AudiencePicker audience={audience} friendshipIds={effectiveIds} friends={social.data?.friends ?? []}
+              disabled={saving || !online || !social.data} canShare={!!social.data?.profile?.display_name}
+              onChange={(next, ids) => { setAudienceChosen(true); setAudience(next); setFriendshipIds(ids); }} />
+          )}
+        </>
+      )}
 
       {!shot ? (
         <button
@@ -199,7 +235,7 @@ function Capture() {
           <p className="flex items-center justify-center gap-2 font-semibold text-primary"><Sparkles className="h-5 w-5" /> Brushing detected!</p>
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={() => setShot(null)}><X className="h-4 w-4" />Retake</Button>
-            <Button className="flex-1" disabled={saving || !online} onClick={save}>Log it</Button>
+            <Button className="flex-1" disabled={saving || !online || !audienceReady} onClick={save}>Log it</Button>
           </div>
         </div>
       ) : (
@@ -209,7 +245,7 @@ function Capture() {
           </p>
           <div className="flex gap-2">
             <Button className="flex-1" onClick={() => setShot(null)}><RefreshCw className="h-4 w-4" />Retake</Button>
-            <Button variant="outline" className="flex-1" disabled={saving || !online} onClick={save}>Confirm & log anyway</Button>
+            <Button variant="outline" className="flex-1" disabled={saving || !online || !audienceReady} onClick={save}>Confirm & log anyway</Button>
           </div>
         </div>
       )}

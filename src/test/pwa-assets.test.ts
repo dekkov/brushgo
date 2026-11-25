@@ -130,22 +130,25 @@ describe("offline worker", () => {
     expect(w.caches.delete).toHaveBeenCalledExactlyOnceWith("brushy-offline-v0");
     expect(w.claim).not.toHaveBeenCalled();
   });
-  it.each(["/", "/calendar", "/capture"])(
-    "falls back for a failed app navigation to %s",
-    async (path) => {
-      const w = worker();
-      const response = w.navigate(path);
-      expect(await response.mock.calls[0]![0]).toEqual({
-        body: w.fallback.body,
-        options: {
-          headers: w.fallback.headers,
-          status: 503,
-          statusText: "Service Unavailable",
-        },
-      });
-      expect(w.cache.match).toHaveBeenCalledWith("/offline.html");
-    },
-  );
+  it.each([
+    "/",
+    "/calendar",
+    "/capture",
+    "/friends",
+    "/friends/11111111-1111-4111-8111-111111111111",
+  ])("falls back for a failed app navigation to %s", async (path) => {
+    const w = worker();
+    const response = w.navigate(path);
+    expect(await response.mock.calls[0]![0]).toEqual({
+      body: w.fallback.body,
+      options: {
+        headers: w.fallback.headers,
+        status: 503,
+        statusText: "Service Unavailable",
+      },
+    });
+    expect(w.cache.match).toHaveBeenCalledWith("/offline.html");
+  });
   it.each([
     ["/api/check-in", {}],
     ["/_serverFn/id", {}],
