@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeStreak, slotFor } from "./streak";
+import { brushingSlot, computeStreak } from "./streak";
 
 describe("streak", () => {
   it("counts only days with both AM and PM", () => {
@@ -24,8 +24,16 @@ describe("streak", () => {
     ];
     expect(computeStreak(rows, "2026-11-16")).toBe(0);
   });
-  it("morning slot ends at 3pm", () => {
-    expect(slotFor(new Date(2026, 0, 1, 14, 59))).toBe("am");
-    expect(slotFor(new Date(2026, 0, 1, 15, 0))).toBe("pm");
-  });
+  it.each([
+    ["2026-01-01T04:59:59-08:00", "2025-12-31", "pm"],
+    ["2026-01-01T05:00:00-08:00", "2026-01-01", "am"],
+    ["2026-01-01T13:59:59-08:00", "2026-01-01", "am"],
+    ["2026-01-01T14:00:00-08:00", "2026-01-01", "pm"],
+    ["2026-03-08T05:00:00-07:00", "2026-03-08", "am"],
+  ])(
+    "assigns %s using the account time zone and brushing-day boundary",
+    (instant, local_date, slot) => {
+      expect(brushingSlot(new Date(instant), "America/Los_Angeles")).toEqual({ local_date, slot });
+    },
+  );
 });

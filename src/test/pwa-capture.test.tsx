@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/capture";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { brushingSlot } from "@/lib/streak";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -30,6 +31,12 @@ vi.mock("@/lib/social.functions", () => ({
 }));
 vi.mock("@/hooks/useSocial", () => ({
   useSocial: () => ({ data: mocks.social, isPending: false, isError: false, refetch: vi.fn() }),
+}));
+vi.mock("@/hooks/useCheckInTiming", () => ({
+  useBrushingClock: () => {
+    const at = () => ({ ...brushingSlot(new Date(), "UTC"), timeZone: "UTC" });
+    return { at, current: at(), timing: { refetch: vi.fn() } };
+  },
 }));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: () => ({ upsert: mocks.upsert }) },
@@ -155,5 +162,30 @@ describe("PWA connection loss during capture", () => {
     expect(screen.getByAltText("Your selfie")).toBeInTheDocument();
     expect(mocks.toast.success).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("preserves the preview and requires a separate save after crossing 2 PM", async () => {
+    vi.setSystemTime(new Date("2026-11-26T13:59:55Z"));
+    render(<Page />);
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "Take selfie" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(screen.getByText("Saving for 2026-11-26 · Morning")).toBeInTheDocument();
+    vi.setSystemTime(new Date("2026-11-26T14:00:01Z"));
+    fireEvent.click(screen.getByRole("button", { name: "Log it" }));
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(screen.getByAltText("Your selfie")).toBeInTheDocument();
+    expect(screen.getByText("Saving for 2026-11-26 · Evening")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Log it" }));
+    });
+    expect(mocks.upsert).toHaveBeenCalledWith({
+      data: {
+        action: "save",
+        data: expect.objectContaining({ local_date: "2026-11-26", slot: "pm" }),
+      },
+    });
   });
 });

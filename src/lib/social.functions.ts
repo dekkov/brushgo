@@ -2,7 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { feedSchema, previewSchema, socialInputSchema, socialStateSchema } from "@/lib/social";
+import {
+  feedSchema,
+  previewSchema,
+  socialInputSchema,
+  socialStateSchema,
+  timingSchema,
+} from "@/lib/social";
 
 export const socialAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -12,6 +18,9 @@ export const socialAction = createServerFn({ method: "POST" })
     const { socialRpc } = await import("./social-rpc.server");
     const result = await socialRpc(data, getRequest());
     switch (data.action) {
+      case "timing":
+      case "schedule_time_zone":
+        return timingSchema.parse(result);
       case "state":
         return socialStateSchema.parse(result);
       case "feed":
