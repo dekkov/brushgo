@@ -135,6 +135,7 @@ describe("offline worker", () => {
     "/calendar",
     "/capture",
     "/friends",
+    "/settings",
     "/friends/11111111-1111-4111-8111-111111111111",
   ])("falls back for a failed app navigation to %s", async (path) => {
     const w = worker();

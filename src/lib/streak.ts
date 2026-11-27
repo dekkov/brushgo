@@ -1,5 +1,8 @@
 export type Slot = "am" | "pm";
-export interface BrushRow { local_date: string; slot: Slot }
+export interface BrushRow {
+  local_date: string;
+  slot: Slot;
+}
 
 export function toLocalDate(d: Date): string {
   const y = d.getFullYear();
@@ -8,9 +11,20 @@ export function toLocalDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Morning slot runs until 3pm local time; evening after. */
-export function slotFor(d: Date): Slot {
-  return d.getHours() < 15 ? "am" : "pm";
+export function brushingSlot(at: Date, timeZone: string): BrushRow {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((value) => value.type === type)?.value);
+  const hour = part("hour");
+  const day = new Date(Date.UTC(part("year"), part("month") - 1, part("day") - (hour < 5 ? 1 : 0)));
+  return { local_date: day.toISOString().slice(0, 10), slot: hour >= 5 && hour < 14 ? "am" : "pm" };
 }
 
 function addDays(dateStr: string, n: number): string {

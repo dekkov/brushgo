@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as CaptureRouteImport } from './routes/capture'
 import { Route as FriendsRouteImport } from './routes/friends'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as FriendsIndexRouteImport } from './routes/friends.index'
 import { Route as FriendsUserIdRouteImport } from './routes/friends.$userId'
 import { Route as ApiSelfiesIdRouteImport } from './routes/api.selfies.$id'
@@ -37,6 +38,11 @@ const FriendsRoute = FriendsRouteImport.update({
   path: '/friends',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FriendsIndexRoute = FriendsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/calendar': typeof CalendarRoute
   '/capture': typeof CaptureRoute
   '/friends': typeof FriendsRouteWithChildren
+  '/settings': typeof SettingsRoute
   '/friends/$userId': typeof FriendsUserIdRoute
   '/friends/': typeof FriendsIndexRoute
   '/api/selfies/$id': typeof ApiSelfiesIdRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/capture': typeof CaptureRoute
+  '/settings': typeof SettingsRoute
   '/friends/$userId': typeof FriendsUserIdRoute
   '/friends': typeof FriendsIndexRoute
   '/api/selfies/$id': typeof ApiSelfiesIdRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/calendar': typeof CalendarRoute
   '/capture': typeof CaptureRoute
   '/friends': typeof FriendsRouteWithChildren
+  '/settings': typeof SettingsRoute
   '/friends/$userId': typeof FriendsUserIdRoute
   '/friends/': typeof FriendsIndexRoute
   '/api/selfies/$id': typeof ApiSelfiesIdRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/capture'
     | '/friends'
+    | '/settings'
     | '/friends/$userId'
     | '/friends/'
     | '/api/selfies/$id'
@@ -95,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/calendar'
     | '/capture'
+    | '/settings'
     | '/friends/$userId'
     | '/friends'
     | '/api/selfies/$id'
@@ -104,6 +115,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/capture'
     | '/friends'
+    | '/settings'
     | '/friends/$userId'
     | '/friends/'
     | '/api/selfies/$id'
@@ -114,6 +126,7 @@ export interface RootRouteChildren {
   CalendarRoute: typeof CalendarRoute
   CaptureRoute: typeof CaptureRoute
   FriendsRoute: typeof FriendsRouteWithChildren
+  SettingsRoute: typeof SettingsRoute
   ApiSelfiesIdRoute: typeof ApiSelfiesIdRoute
 }
 
@@ -145,6 +158,13 @@ declare module '@tanstack/react-router' {
       path: '/friends'
       fullPath: '/friends'
       preLoaderRoute: typeof FriendsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/friends/': {
@@ -189,6 +209,7 @@ const rootRouteChildren: RootRouteChildren = {
   CalendarRoute: CalendarRoute,
   CaptureRoute: CaptureRoute,
   FriendsRoute: FriendsRouteWithChildren,
+  SettingsRoute: SettingsRoute,
   ApiSelfiesIdRoute: ApiSelfiesIdRoute,
 }
 export const routeTree = rootRouteImport

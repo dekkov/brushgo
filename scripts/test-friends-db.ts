@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
-import { computeStreak, type BrushRow } from "../src/lib/streak.ts";
+import { brushingSlot, computeStreak, type BrushRow } from "../src/lib/streak.ts";
 import { s3PhotoKey } from "../src/lib/selfie-path.ts";
 
 type Friend = { friendship_id: string; user_id: string; display_name: string; streak: number };
@@ -945,6 +945,83 @@ try {
           );
         }
       }
+    },
+  );
+
+  await check(
+    "timing migration preserves history and applies account-zone boundaries in SQL",
+    async () => {
+      await db.exec(
+        await readFile(
+          new URL("../docs/sql/20261127_check_in_timing.sql", import.meta.url),
+          "utf8",
+        ),
+      );
+      const prior = await db.query<{ local_date: string }>(
+        "select local_date::text from public.brushings where id = $1",
+        [legacy.rows[0]!.id],
+      );
+      assert.equal(prior.rows[0]?.local_date, "2025-01-01");
+      for (const instant of [
+        "2026-01-01T04:59:59-08:00",
+        "2026-01-01T05:00:00-08:00",
+        "2026-01-01T13:59:59-08:00",
+        "2026-01-01T14:00:00-08:00",
+        "2026-03-08T05:00:00-07:00",
+      ]) {
+        const zone = "America/Los_Angeles";
+        const { rows } = await db.query<BrushRow>(
+          "select local_date::text, slot from brushy_private.check_in_slot($1, $2)",
+          [instant, zone],
+        );
+        assert.deepEqual(rows[0], brushingSlot(new Date(instant), zone));
+      }
+
+      type Timing = {
+        time_zone: string;
+        next_time_zone: string | null;
+        changes_at: string | null;
+        server_now: string;
+      };
+      const owner = await rawUser();
+      const zone = "America/Los_Angeles";
+      const timing = await rpc<Timing>(owner, "timing", { time_zone: zone });
+      assert.equal(timing.time_zone, zone);
+      await rpc(owner, "profile", { display_name: "Timing owner", time_zone: "UTC" });
+      assert.equal((await rpc<Timing>(owner, "timing", { time_zone: "UTC" })).time_zone, zone);
+      const expected = brushingSlot(new Date(timing.server_now), zone);
+      await denied(
+        () => save(owner, { ...expected, slot: expected.slot === "am" ? "pm" : "am" }),
+        /window changed/,
+      );
+      await denied(() => save(owner, { ...expected, local_date: "2000-01-01" }), /window changed/);
+      const saved = await save(owner, expected);
+      assert.ok(saved.revision);
+      await denied(
+        () =>
+          asRole(
+            "authenticated",
+            owner,
+            "select brushy_private.social_before_timing('state','{}')",
+          ),
+        /permission denied/,
+      );
+
+      const scheduled = await rpc<Timing>(owner, "schedule_time_zone", { time_zone: "Asia/Tokyo" });
+      assert.equal(scheduled.time_zone, zone);
+      assert.equal(scheduled.next_time_zone, "Asia/Tokyo");
+      const boundary = new Date(scheduled.changes_at!);
+      assert.equal(brushingSlot(new Date(boundary.getTime() - 1), zone).slot, "pm");
+      assert.equal(brushingSlot(boundary, zone).slot, "am");
+      assert.ok(boundary.getTime() > Date.parse(scheduled.server_now));
+      await db.query(
+        "update brushy_private.profiles set time_zone_changes_at = now() - interval '1 minute' where id = $1",
+        [owner],
+      );
+      const active = await rpc<Timing>(owner, "timing", { time_zone: zone });
+      assert.equal(active.time_zone, "Asia/Tokyo");
+      assert.equal(active.next_time_zone, null);
+      assert.equal((await rpc<Feed>(owner, "feed")).items[0]?.local_date, expected.local_date);
     },
   );
 

@@ -10,8 +10,16 @@ const nameSchema = z.string().trim().min(1).max(40);
 const uuid = z.string().uuid();
 const friendIds = z.array(uuid).max(5);
 const timeZone = z.string().min(1).max(80);
+export const timingSchema = z.object({
+  server_now: z.string().datetime({ offset: true }),
+  time_zone: timeZone,
+  next_time_zone: timeZone.nullable(),
+  changes_at: z.string().datetime({ offset: true }).nullable(),
+});
 export const socialInputSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("state"), data: z.object({}) }),
+  z.object({ action: z.literal("timing"), data: z.object({ time_zone: timeZone }) }),
+  z.object({ action: z.literal("schedule_time_zone"), data: z.object({ time_zone: timeZone }) }),
   z.object({
     action: z.literal("profile"),
     data: z.object({ display_name: nameSchema, time_zone: timeZone }),

@@ -8,7 +8,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOnline } from "@/hooks/useOnline";
 import { detect, isVerified, loadDetector, type Detection } from "@/lib/detector";
 import { createSelfieUpload } from "@/lib/selfie.functions";
-import { slotFor, toLocalDate } from "@/lib/streak";
+import type { BrushRow } from "@/lib/streak";
+import { useBrushingClock } from "@/hooks/useCheckInTiming";
 import { AudiencePicker } from "@/components/AudiencePicker";
 import { useSocial } from "@/hooks/useSocial";
 import { currentTimeZone, rememberedAudience, type Audience } from "@/lib/social";
@@ -21,7 +22,10 @@ export const Route = createFileRoute("/capture")({
       { title: "Snap a Brushing Selfie — Brushy" },
       { name: "description", content: "Take a live selfie while brushing to log your check-in." },
       { property: "og:title", content: "Snap a Brushing Selfie — Brushy" },
-      { property: "og:description", content: "Take a live selfie while brushing to log your check-in." },
+      {
+        property: "og:description",
+        content: "Take a live selfie while brushing to log your check-in.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -38,6 +42,7 @@ function Capture() {
   const online = useOnline();
   const navigate = useNavigate();
   const social = useSocial();
+  const clock = useBrushingClock();
   const queryClient = useQueryClient();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -47,14 +52,20 @@ function Capture() {
   const [modelReady, setModelReady] = useState(false);
   const [live, setLive] = useState<Detection | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [shot, setShot] = useState<{ blob: Blob; url: string; det: Detection } | null>(null);
+  const [shot, setShot] = useState<{
+    blob: Blob;
+    url: string;
+    det: Detection;
+    target: BrushRow;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [audience, setAudience] = useState<Audience>("only_me");
   const [friendshipIds, setFriendshipIds] = useState<string[]>([]);
   const [audienceChosen, setAudienceChosen] = useState(false);
   const availableIds = new Set(social.data?.friends.map((friend) => friend.friendship_id) ?? []);
   const effectiveIds = friendshipIds.filter((id) => availableIds.has(id));
-  const audienceReady = !!social.data && (audience !== "selected_friends" || effectiveIds.length > 0);
+  const audienceReady =
+    !!social.data && (audience !== "selected_friends" || effectiveIds.length > 0);
 
   useEffect(() => {
     if (!social.data || audienceChosen) return;
@@ -79,7 +90,10 @@ function Capture() {
     if (shot) return;
     let stream: MediaStream | null = null;
     navigator.mediaDevices
-      ?.getUserMedia({ video: { facingMode: facing, width: { ideal: 960 }, height: { ideal: 1280 } }, audio: false })
+      ?.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 960 }, height: { ideal: 1280 } },
+        audio: false,
+      })
       .then((s) => {
         stream = s;
         if (videoRef.current) videoRef.current.srcObject = s;
@@ -92,17 +106,25 @@ function Capture() {
   // Model + live feedback loop
   useEffect(() => {
     let stop = false;
-    loadDetector().then(() => setModelReady(true)).catch(() => {});
+    loadDetector()
+      .then(() => setModelReady(true))
+      .catch(() => {});
     const tick = async () => {
       if (stop) return;
       const v = videoRef.current;
       if (modelReady && v && v.readyState >= 2 && !shot) {
-        try { setLive(await detect(v)); } catch { /* ignore */ }
+        try {
+          setLive(await detect(v));
+        } catch {
+          /* ignore */
+        }
       }
       setTimeout(tick, 800);
     };
     tick();
-    return () => { stop = true; };
+    return () => {
+      stop = true;
+    };
   }, [modelReady, shot]);
 
   function startCountdown() {
@@ -119,8 +141,7 @@ function Capture() {
         countdownRef.current = null;
         setCountdown(null);
         snap();
-      }
-      else setCountdown(n);
+      } else setCountdown(n);
     }, 1000);
   }
 
@@ -129,16 +150,32 @@ function Capture() {
       toast.error("Reconnect before taking a brushing selfie.");
       return;
     }
-    const v = videoRef.current, c = canvasRef.current;
-    if (!v || !c) return;
-    c.width = v.videoWidth; c.height = v.videoHeight;
+    const v = videoRef.current,
+      c = canvasRef.current;
+    const target = clock.at();
+    if (!v || !c || !target) return;
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
     const ctx = c.getContext("2d")!;
-    if (facing === "user") { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
+    if (facing === "user") {
+      ctx.translate(c.width, 0);
+      ctx.scale(-1, 1);
+    }
     ctx.drawImage(v, 0, 0);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     let det: Detection = { person: 0, toothbrush: 0 };
-    try { det = await detect(c); } catch { /* model unavailable */ }
-    c.toBlob((blob) => { if (blob) setShot({ blob, url: URL.createObjectURL(blob), det }); }, "image/jpeg", 0.85);
+    try {
+      det = await detect(c);
+    } catch {
+      /* model unavailable */
+    }
+    c.toBlob(
+      (blob) => {
+        if (blob) setShot({ blob, url: URL.createObjectURL(blob), det, target });
+      },
+      "image/jpeg",
+      0.85,
+    );
   }
 
   async function save() {
@@ -151,10 +188,15 @@ function Capture() {
       toast.error("Choose an available audience before saving.");
       return;
     }
+    const current = clock.at();
+    if (!current) return;
+    if (shot.target.local_date !== current.local_date || shot.target.slot !== current.slot) {
+      setShot({ ...shot, target: current });
+      toast.error("The check-in window changed. Review the new slot, then tap save again.");
+      return;
+    }
     setSaving(true);
-    const now = new Date();
-    const local_date = toLocalDate(now);
-    const slot = slotFor(now);
+    const { local_date, slot } = shot.target;
     try {
       const { path, url } = await createSelfieUpload();
       const upload = await fetch(url, {
@@ -164,11 +206,21 @@ function Capture() {
       });
       if (!upload.ok) throw new Error("Could not upload your selfie. Please try again.");
       const verified = isVerified(shot.det);
-      await socialAction({ data: { action: "save", data: {
-        local_date, slot, photo_path: path, verified, confidence: shot.det.toothbrush,
-        audience, friendship_ids: audience === "selected_friends" ? effectiveIds : [],
-        time_zone: currentTimeZone(),
-      } } });
+      await socialAction({
+        data: {
+          action: "save",
+          data: {
+            local_date,
+            slot,
+            photo_path: path,
+            verified,
+            confidence: shot.det.toothbrush,
+            audience,
+            friendship_ids: audience === "selected_friends" ? effectiveIds : [],
+            time_zone: currentTimeZone(),
+          },
+        },
+      });
       await queryClient.invalidateQueries({ queryKey: ["social"] });
       await queryClient.resetQueries({ queryKey: ["feed"] });
       toast.success(verified ? "Verified brushing logged ✨" : "Check-in logged!");
@@ -176,7 +228,12 @@ function Capture() {
     } catch (error) {
       console.error("Could not save brushing", error);
       void social.refetch();
-      toast.error("Could not save your check-in. Please try again.");
+      void clock.timing.refetch();
+      toast.error(
+        error instanceof Error && error.message.startsWith("The check-in window changed.")
+          ? error.message
+          : "Could not save your check-in. Please try again.",
+      );
     } finally {
       setSaving(false);
     }
@@ -191,11 +248,23 @@ function Capture() {
         {shot ? (
           <img src={shot.url} alt="Your selfie" className="h-full w-full object-cover" />
         ) : (
-          <video ref={videoRef} autoPlay playsInline muted className={`h-full w-full object-cover ${facing === "user" ? "-scale-x-100" : ""}`} />
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`h-full w-full object-cover ${facing === "user" ? "-scale-x-100" : ""}`}
+          />
         )}
-        {camError && <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-background">{camError}</div>}
+        {camError && (
+          <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-background">
+            {camError}
+          </div>
+        )}
         {countdown && (
-          <div className="absolute inset-0 flex items-center justify-center font-display text-9xl font-extrabold text-background drop-shadow-lg">{countdown}</div>
+          <div className="absolute inset-0 flex items-center justify-center font-display text-9xl font-extrabold text-background drop-shadow-lg">
+            {countdown}
+          </div>
         )}
         {!shot && (
           <div className="absolute left-3 right-3 top-3 flex flex-wrap gap-2">
@@ -204,19 +273,55 @@ function Capture() {
           </div>
         )}
         {!shot && (
-          <button onClick={() => setFacing(facing === "user" ? "environment" : "user")} className="absolute bottom-3 right-3 rounded-full bg-card/80 p-3" aria-label="Flip camera">
+          <button
+            onClick={() => setFacing(facing === "user" ? "environment" : "user")}
+            className="absolute bottom-3 right-3 rounded-full bg-card/80 p-3"
+            aria-label="Flip camera"
+          >
             <RefreshCw className="h-5 w-5" />
           </button>
         )}
       </div>
       <canvas ref={canvasRef} className="hidden" />
+      {clock.timing.isPending && <p role="status">Loading check-in timing…</p>}
+      {clock.timing.isError && (
+        <p role="alert">
+          Could not load check-in timing.{" "}
+          <button className="underline" onClick={() => void clock.timing.refetch()}>
+            Retry
+          </button>
+        </p>
+      )}
+      {shot && (
+        <p className="text-center text-sm">
+          Saving for {shot.target.local_date} · {shot.target.slot === "am" ? "Morning" : "Evening"}
+        </p>
+      )}
       {shot && (
         <>
-          {social.isError && <p role="alert" className="rounded-xl bg-secondary p-4">{social.error.message}<button className="ml-2 underline" onClick={() => void social.refetch()}>Retry</button></p>}
-          {social.isPending ? <p role="status">Loading sharing preferences…</p> : (
-            <AudiencePicker audience={audience} friendshipIds={effectiveIds} friends={social.data?.friends ?? []}
-              disabled={saving || !online || !social.data} canShare={!!social.data?.profile?.display_name}
-              onChange={(next, ids) => { setAudienceChosen(true); setAudience(next); setFriendshipIds(ids); }} />
+          {social.isError && (
+            <p role="alert" className="rounded-xl bg-secondary p-4">
+              {social.error.message}
+              <button className="ml-2 underline" onClick={() => void social.refetch()}>
+                Retry
+              </button>
+            </p>
+          )}
+          {social.isPending ? (
+            <p role="status">Loading sharing preferences…</p>
+          ) : (
+            <AudiencePicker
+              audience={audience}
+              friendshipIds={effectiveIds}
+              friends={social.data?.friends ?? []}
+              disabled={saving || !online || !social.data}
+              canShare={!!social.data?.profile?.display_name}
+              onChange={(next, ids) => {
+                setAudienceChosen(true);
+                setAudience(next);
+                setFriendshipIds(ids);
+              }}
+            />
           )}
         </>
       )}
@@ -224,7 +329,7 @@ function Capture() {
       {!shot ? (
         <button
           onClick={startCountdown}
-          disabled={!online || !!camError || countdown !== null}
+          disabled={!online || !clock.current || !!camError || countdown !== null}
           className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-4 border-primary bg-card shadow-soft transition-transform active:scale-90 disabled:opacity-40"
           aria-label="Take selfie"
         >
@@ -232,20 +337,44 @@ function Capture() {
         </button>
       ) : isVerified(shot.det) ? (
         <div className="space-y-3">
-          <p className="flex items-center justify-center gap-2 font-semibold text-primary"><Sparkles className="h-5 w-5" /> Brushing detected!</p>
+          <p className="flex items-center justify-center gap-2 font-semibold text-primary">
+            <Sparkles className="h-5 w-5" /> Brushing detected!
+          </p>
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setShot(null)}><X className="h-4 w-4" />Retake</Button>
-            <Button className="flex-1" disabled={saving || !online || !audienceReady} onClick={save}>Log it</Button>
+            <Button variant="outline" className="flex-1" onClick={() => setShot(null)}>
+              <X className="h-4 w-4" />
+              Retake
+            </Button>
+            <Button
+              className="flex-1"
+              disabled={saving || !online || !audienceReady}
+              onClick={save}
+            >
+              Log it
+            </Button>
           </div>
         </div>
       ) : (
         <div className="space-y-3">
           <p className="text-center text-sm text-muted-foreground">
-            {shot.det.person < 0.5 ? "We couldn't spot your face clearly." : "Make sure your brush is in view."} Try again, or log it anyway.
+            {shot.det.person < 0.5
+              ? "We couldn't spot your face clearly."
+              : "Make sure your brush is in view."}{" "}
+            Try again, or log it anyway.
           </p>
           <div className="flex gap-2">
-            <Button className="flex-1" onClick={() => setShot(null)}><RefreshCw className="h-4 w-4" />Retake</Button>
-            <Button variant="outline" className="flex-1" disabled={saving || !online || !audienceReady} onClick={save}>Confirm & log anyway</Button>
+            <Button className="flex-1" onClick={() => setShot(null)}>
+              <RefreshCw className="h-4 w-4" />
+              Retake
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1"
+              disabled={saving || !online || !audienceReady}
+              onClick={save}
+            >
+              Confirm & log anyway
+            </Button>
           </div>
         </div>
       )}
@@ -255,8 +384,11 @@ function Capture() {
 
 function Pill({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <span className={`rounded-full px-3 py-1 text-xs font-bold backdrop-blur ${ok ? "bg-primary text-primary-foreground" : "bg-card/80 text-foreground"}`}>
-      {ok ? "✓ " : "○ "}{label}
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-bold backdrop-blur ${ok ? "bg-primary text-primary-foreground" : "bg-card/80 text-foreground"}`}
+    >
+      {ok ? "✓ " : "○ "}
+      {label}
     </span>
   );
 }

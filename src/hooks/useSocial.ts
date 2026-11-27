@@ -29,8 +29,10 @@ export function useSocialSessionBoundary() {
     return () => {
       void client.cancelQueries({ queryKey: ["social", userId] });
       void client.cancelQueries({ queryKey: ["feed", userId] });
+      void client.cancelQueries({ queryKey: ["check-in-timing", userId] });
       client.removeQueries({ queryKey: ["social", userId] });
       client.removeQueries({ queryKey: ["feed", userId] });
+      client.removeQueries({ queryKey: ["check-in-timing", userId] });
     };
   }, [client, user?.id]);
 }

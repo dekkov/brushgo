@@ -59,6 +59,21 @@ delete tables, rerun the update, or loosen database permissions to fix it.**
 Returning to the old app also needs a careful database rollback; it is not just
 an app redeploy. Already-viewed photos or screenshots cannot be taken back.
 
+## Check-in timing update
+
+After Friends is installed, pause check-ins, run
+[`20261127_check_in_timing.sql`](20261127_check_in_timing.sql) once, then publish
+the app with **Settings** and have users reopen it before resuming check-ins.
+The new app requires the timing RPC; an older app may submit a slot or date the
+new database rejects.
+
+Morning starts at 5 AM and evening at 2 PM in the account time zone. Before 5 AM,
+an evening check-in belongs to the previous day. Existing check-in dates and
+saved profile time zones are retained; accounts without an established time
+zone start with the device's time zone. Changes in Settings take effect at the
+next 5 AM in the previous zone. Verify the displayed zone, save a selfie in the
+active slot, and confirm its date and slot in Calendar before ending the pause.
+
 <details>
 <summary>Developer reference: permissions, API, testing, and rollback</summary>
 
