@@ -1025,6 +1025,93 @@ try {
     },
   );
 
+  await check(
+    "hearts follow photo access, friendship identity, and revision lifecycle",
+    async () => {
+      await db.exec(
+        await readFile(new URL("../docs/sql/20261127_selfie_hearts.sql", import.meta.url), "utf8"),
+      );
+      const owner = await user("Heart owner");
+      const viewer = await user("Heart viewer");
+      const second = await user("Other viewer");
+      const firstFriendship = await befriend(viewer, owner);
+      await befriend(second, owner);
+      const today = brushingSlot(new Date(), "UTC");
+      const write = (options: SaveOptions) => save(owner.id, { ...today, ...options });
+      let selfie = await write({
+        audience: "selected_friends",
+        friendship_ids: [firstFriendship.friendship_id],
+      });
+      type Hearts = { names: string[]; hearted: boolean };
+      const react = (actor: User, target: Saved, hearted = true) =>
+        rpc<Hearts>(actor.id, "set_heart", { ...target, hearted });
+      const readHearts = async (actor: User) =>
+        (
+          await rpc<{ items: (Saved & { hearts: Hearts })[] }>(actor.id, "feed", {
+            owner_id: owner.id,
+          })
+        ).items.find((item) => item.id === selfie.id)?.hearts;
+      await denied(() => react(owner, selfie), /Selfie unavailable/);
+      await denied(() => react(second, selfie), /Selfie unavailable/);
+      await denied(() => react(outsider, selfie), /Selfie unavailable/);
+      await denied(
+        () => rpc(viewer.id, "set_heart", { ...selfie, hearted: "true" }),
+        /Invalid heart payload/,
+      );
+      await denied(
+        () => asRole("authenticated", viewer.id, "select * from brushy_private.selfie_hearts"),
+        /permission denied/,
+      );
+      await denied(
+        () =>
+          asRole(
+            "authenticated",
+            viewer.id,
+            "select brushy_private.social_before_hearts('feed','{}')",
+          ),
+        /permission denied/,
+      );
+      assert.deepEqual(await react(viewer, selfie), { names: ["Heart viewer"], hearted: true });
+      assert.deepEqual(await react(viewer, selfie), { names: ["Heart viewer"], hearted: true });
+      assert.deepEqual(await readHearts(owner), { names: ["Heart viewer"], hearted: false });
+      assert.deepEqual(await readHearts(viewer), { names: ["Heart viewer"], hearted: true });
+      assert.equal(await readHearts(second), undefined);
+      assert.deepEqual(await react(viewer, selfie, false), { names: [], hearted: false });
+      await react(viewer, selfie);
+
+      const old = selfie;
+      selfie = await write({ audience: "all_friends" });
+      assert.equal(selfie.id, old.id);
+      assert.notEqual(selfie.revision, old.revision);
+      assert.deepEqual(await readHearts(owner), { names: [], hearted: false });
+      await denied(() => react(viewer, old), /Selfie unavailable/);
+      await react(viewer, selfie);
+      await react(second, selfie);
+      assert.deepEqual(await readHearts(second), {
+        names: ["Heart viewer", "Other viewer"],
+        hearted: true,
+      });
+
+      await rpc(viewer.id, "remove", { friendship_id: firstFriendship.friendship_id });
+      await befriend(viewer, owner);
+      assert.deepEqual(await readHearts(viewer), { names: ["Other viewer"], hearted: false });
+      await react(viewer, selfie);
+      await rpc(viewer.id, "block", { user_id: owner.id });
+      assert.deepEqual(await readHearts(owner), { names: ["Other viewer"], hearted: false });
+      await denied(() => react(viewer, selfie), /Selfie unavailable/);
+
+      await asRole("authenticated", owner.id, "delete from public.brushings where id = $1", [
+        selfie.id,
+      ]);
+      await denied(() => react(second, selfie), /Selfie unavailable/);
+      const removed = await db.query(
+        "select 1 from brushy_private.selfie_hearts where brushing_id = $1",
+        [selfie.id],
+      );
+      assert.equal(removed.rows.length, 0);
+    },
+  );
+
   console.log(
     `\n${checks} checks passed against isolated PostgreSQL (PGlite), including role-switched SQL/RLS.`,
   );

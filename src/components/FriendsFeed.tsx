@@ -1,10 +1,15 @@
 import { useEffect } from "react";
 import { Link } from "@tanstack/react-router";
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { Flame, RefreshCw } from "lucide-react";
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { Flame, Heart, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnline } from "@/hooks/useOnline";
-import { feedSchema, initials } from "@/lib/social";
+import { type FeedItem, feedSchema, heartSummarySchema, initials } from "@/lib/social";
 import { socialAction } from "@/lib/social.functions";
 import { PrivateSelfie } from "@/components/PrivateSelfie";
 import { DeleteSelfieButton } from "@/components/DeleteSelfieButton";
@@ -13,6 +18,67 @@ import { z } from "zod";
 import { cursorSchema } from "@/lib/social";
 
 type Cursor = z.infer<typeof cursorSchema> | undefined;
+
+function SelfieHearts({ item, viewerId }: { item: FeedItem; viewerId: string }) {
+  const client = useQueryClient();
+  const { id, revision, hearts, owner_id } = item;
+  const queryKey = ["feed", viewerId];
+  const mutation = useMutation({
+    mutationFn: async (hearted: boolean) =>
+      heartSummarySchema.parse(
+        await socialAction({
+          data: { action: "set_heart", data: { id, revision, hearted } },
+        }),
+      ),
+    onSuccess: (result) => {
+      client.setQueriesData<InfiniteData<z.infer<typeof feedSchema>>>(
+        { queryKey },
+        (cached) =>
+          cached && {
+            ...cached,
+            pages: cached.pages.map((page) => ({
+              ...page,
+              items: page.items.map((row) =>
+                row.id === id && row.revision === revision ? { ...row, hearts: result } : row,
+              ),
+            })),
+          },
+      );
+    },
+  });
+  if (!hearts) return null;
+  const count = `${hearts.names.length} ${hearts.names.length === 1 ? "heart" : "hearts"}`;
+  return (
+    <div className="space-y-1">
+      {owner_id === viewerId ? (
+        <p className="text-sm">{count}</p>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-pressed={hearts.hearted}
+          aria-label={`Heart selfie: ${count}`}
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate(!hearts.hearted)}
+        >
+          <Heart aria-hidden className={hearts.hearted ? "fill-current text-primary" : ""} />
+          {count}
+        </Button>
+      )}
+      {hearts.names.length > 0 && (
+        <p className="break-words text-xs text-muted-foreground">
+          Hearted by {hearts.names.join(", ")}
+        </p>
+      )}
+      {mutation.isError && (
+        <p role="alert" className="text-sm">
+          Could not update your heart. Refresh or try again.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function FriendsFeed({ ownerId, onDeleted }: { ownerId?: string; onDeleted?: () => void }) {
   const { user } = useAuth();
@@ -128,6 +194,7 @@ export function FriendsFeed({ ownerId, onDeleted }: { ownerId?: string; onDelete
                 viewerId={user.id}
                 alt={`${item.display_name || "Your"} brushing selfie`}
               />
+              <SelfieHearts key={user.id} item={item} viewerId={user.id} />
               {item.owner_id === user.id && (
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">

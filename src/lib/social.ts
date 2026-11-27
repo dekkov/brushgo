@@ -46,6 +46,10 @@ export const socialInputSchema = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("photo"), data: z.object({ id: uuid, revision: uuid }) }),
   z.object({
+    action: z.literal("set_heart"),
+    data: z.object({ id: uuid, revision: uuid, hearted: z.boolean() }),
+  }),
+  z.object({
     action: z.literal("save"),
     data: z
       .object({
@@ -107,6 +111,10 @@ export const socialStateSchema = z.object({
   invite: z.string().nullable(),
 });
 export type SocialState = z.infer<typeof socialStateSchema>;
+export const heartSummarySchema = z.object({
+  names: z.array(z.string()),
+  hearted: z.boolean(),
+});
 export const feedItemSchema = z.object({
   id: uuid,
   revision: uuid,
@@ -118,6 +126,7 @@ export const feedItemSchema = z.object({
   verified: z.boolean(),
   captured_at: z.string(),
   audience: audienceSchema,
+  hearts: heartSummarySchema.optional(),
 });
 export type FeedItem = z.infer<typeof feedItemSchema>;
 export const feedSchema = z.object({

@@ -74,6 +74,18 @@ zone start with the device's time zone. Changes in Settings take effect at the
 next 5 AM in the previous zone. Verify the displayed zone, save a selfie in the
 active slot, and confirm its date and slot in Calendar before ending the pause.
 
+## Selfie hearts update
+
+After check-in timing is installed, run
+[`20261127_selfie_hearts.sql`](20261127_selfie_hearts.sql) once and deploy the
+app with heart controls. Existing check-ins and audiences do not change. Either
+side can deploy first: the current app ignores the extra feed data, and the new
+app hides heart controls until the database returns heart summaries.
+
+With two friends, heart a shared selfie and refresh as the owner to verify the
+count and name. Remove the heart, then add it again and retake or delete the
+selfie. Verify that the old heart does not remain. No push notifications are sent.
+
 <details>
 <summary>Developer reference: permissions, API, testing, and rollback</summary>
 
@@ -189,6 +201,11 @@ slot,verified,captured_at,audience}]`, newest first. Only authorized captures
   `{captured_at,id}` only if another item exists, otherwise `null`. Pass the
   cursor unchanged. Ordering compares timestamp and UUID together.
 - Friend streaks include private slots but only expose an aggregate integer.
+- After the hearts migration, feed items also include `hearts: {names: string[],
+  hearted: boolean}`. The count is `names.length`; `hearted` is for the current
+  viewer. `set_heart` takes `{id,revision,hearted: boolean}` and returns the
+  refreshed summary. Only friends who currently have access to that revision
+  may write a heart; the owner can read summaries but cannot react.
   SQL matches `computeStreak`: consecutive days with both AM and PM, ending
   today or yesterday if today is incomplete, using the owner's stored timezone.
 - `save.local_date` is an actual date in `YYYY-MM-DD` form; `slot` is `am|pm`;
