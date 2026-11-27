@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FriendsFeed } from "./FriendsFeed";
 
@@ -41,6 +41,7 @@ describe("combined selfie feed", () => {
   beforeEach(() => {
     mocks.action.mockReset();
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    onlineManager.setOnline(true);
   });
   afterEach(() => {
     cleanup();
@@ -91,5 +92,51 @@ describe("combined selfie feed", () => {
     });
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Reconnect to view shared selfies");
+  });
+
+  it("adds and removes a heart only after the server confirms the revision update", async () => {
+    let finish!: (value: { names: string[]; hearted: boolean }) => void;
+    mocks.action
+      .mockResolvedValueOnce({
+        owner: null,
+        items: [{ ...photo, hearts: { names: [], hearted: false } }],
+        next: null,
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ names: [], hearted: false });
+    show();
+    const button = await screen.findByRole("button", { name: "Heart selfie: 0 hearts" });
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    expect(mocks.action).toHaveBeenLastCalledWith({
+      data: { action: "set_heart", data: { id, revision: other, hearted: true } },
+    });
+    await act(async () => finish({ names: ["Viewer"], hearted: true }));
+    expect(await screen.findByText("Hearted by Viewer")).toBeInTheDocument();
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "false"));
+    expect(screen.queryByText("Hearted by Viewer")).not.toBeInTheDocument();
+    expect(mocks.action).toHaveBeenLastCalledWith({
+      data: { action: "set_heart", data: { id, revision: other, hearted: false } },
+    });
+  });
+
+  it("shows heart names to the owner without allowing a self-reaction", async () => {
+    mocks.action.mockResolvedValue({
+      owner: null,
+      items: [{ ...photo, owner_id: id, hearts: { names: ["Ada"], hearted: false } }],
+      next: null,
+    });
+    show();
+    expect(await screen.findByText("Hearted by Ada")).toBeInTheDocument();
+    expect(screen.getByText("1 heart")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Heart selfie/ })).not.toBeInTheDocument();
   });
 });

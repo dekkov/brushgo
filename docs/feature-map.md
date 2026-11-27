@@ -28,9 +28,9 @@ Product terms belong in the [glossary](../GLOSSARY.md). Setup and device accepta
 ## History and feed
 
 - **Entry points:** [Calendar](../src/routes/calendar.tsx), [home feed](../src/routes/index.tsx), and [friend history](../src/routes/friends.$userId.tsx).
-- **Core/data:** [useBrushings](../src/hooks/useBrushings.ts) reads owner-only records and signed image URLs for personal views. [FriendsFeed](../src/components/FriendsFeed.tsx) reads paginated, authorized metadata via the social `feed` action and loads images through [PrivateSelfie](../src/components/PrivateSelfie.tsx). There is no persisted feed table.
+- **Core/data:** [useBrushings](../src/hooks/useBrushings.ts) reads owner-only records and signed image URLs for personal views. [FriendsFeed](../src/components/FriendsFeed.tsx) reads paginated, authorized metadata and heart summaries via `feed`, updates the viewer's heart through `set_heart`, and loads images through [PrivateSelfie](../src/components/PrivateSelfie.tsx). There is no persisted feed table. The [hearts migration](sql/20261127_selfie_hearts.sql) owns private reaction rows tied to a photo revision and friendship.
 - **Tests:** [Feed pagination/refresh/offline](../src/components/FriendsFeed.test.tsx), [image lifecycle](../src/components/PrivateSelfie.test.tsx), and [SQL checks](../scripts/test-friends-db.ts) for feed authorization and cursor ordering.
-- **Dependencies:** [Friends](#friends) controls which records are visible; [photo privacy](#photo-privacy-and-storage) rechecks access when images load. [Check-in mutations](#check-ins-streaks-replacement-and-deletion) change calendar contents, feed ordering, and streaks.
+- **Dependencies:** [Friends](#friends) controls which records are visible; [photo privacy](#photo-privacy-and-storage) rechecks access when images load. [Check-in mutations](#check-ins-streaks-replacement-and-deletion) change calendar contents, feed ordering, and streaks. Ending a friendship, replacing a selfie, or deleting a selfie removes the associated hearts.
 
 ## Friends
 

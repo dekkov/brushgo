@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   feedSchema,
+  heartSummarySchema,
   previewSchema,
   socialInputSchema,
   socialStateSchema,
@@ -25,6 +26,8 @@ export const socialAction = createServerFn({ method: "POST" })
         return socialStateSchema.parse(result);
       case "feed":
         return feedSchema.parse(result);
+      case "set_heart":
+        return heartSummarySchema.parse(result);
       case "preview":
         return previewSchema.parse(result);
       case "reset_invite":
