@@ -1,5 +1,6 @@
 # Working on Brushy
 
+- Before implementing, debugging, or reviewing feature changes, read the relevant sections of [the feature map](docs/feature-map.md) and follow their dependency links. Update the map when feature boundaries, key entry points, or data ownership change.
 - Database changes are reviewable SQL under `docs/sql/`, applied by the owner in Supabase; do not mutate a live database during development.
 - For Friends schema changes or deployment, read `docs/sql/friends-deployment.md` before changing its RPC contract or privileges.
 - Leave automatically generated files to their generators. Keep secrets server-side and out of Git.
