@@ -56,7 +56,7 @@ const migration = await readFile(
 );
 
 async function asRole<T>(
-  role: "authenticated" | "anon",
+  role: "authenticated" | "anon" | "service_role",
   user: string | null,
   sql: string,
   args: unknown[] = [],
@@ -139,12 +139,17 @@ try {
   await db.exec(`
     create role anon nologin;
     create role authenticated nologin;
+    create role service_role nologin;
     create schema auth;
     create table auth.users(id uuid primary key);
+    create table auth.sessions(id uuid primary key, user_id uuid references auth.users(id), not_after timestamptz);
+    create function auth.jwt() returns jsonb language sql stable as $$
+      select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
+    $$;
     create function auth.uid() returns uuid language sql stable as $$
       select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
     $$;
-    grant usage on schema public, auth to anon, authenticated;
+    grant usage on schema public, auth to anon, authenticated, service_role;
     grant execute on function auth.uid() to anon, authenticated;
     create table public.brushings (
       id uuid primary key default gen_random_uuid(),
@@ -1109,6 +1114,181 @@ try {
         [selfie.id],
       );
       assert.equal(removed.rows.length, 0);
+    },
+  );
+
+  await check(
+    "Web Push separates per-device consent from account preferences and private dispatch",
+    async () => {
+      await db.exec(
+        await readFile(new URL("../docs/sql/20261127_web_push.sql", import.meta.url), "utf8"),
+      );
+      const recipient = await user("Push recipient");
+      const sender = await user("Push sender");
+      const other = await user("Push other");
+      const session = randomUUID(),
+        otherSession = randomUUID();
+      await db.query("insert into auth.sessions (id,user_id) values ($1,$2),($3,$4)", [
+        session,
+        recipient.id,
+        otherSession,
+        other.id,
+      ]);
+      const push = async (action: string, payload: unknown, account = recipient, sid = session) =>
+        db.transaction(async (tx) => {
+          await tx.exec("set local role authenticated");
+          await tx.query(
+            "select set_config('request.jwt.claim.sub',$1,true),set_config('request.jwt.claims',$2,true)",
+            [account.id, JSON.stringify({ session_id: sid })],
+          );
+          const { rows } = await tx.query<{ value: { enabled: string[]; attached: boolean } }>(
+            "select public.brushy_push($1,$2::jsonb) value",
+            [action, JSON.stringify(payload)],
+          );
+          return rows[0]!.value;
+        });
+      const endpoint = "https://fcm.googleapis.com/fcm/send/testing";
+      const subscription = { endpoint, p256dh: `B${"A".repeat(86)}`, auth: "A".repeat(22) };
+      await denied(
+        () => push("attach", { ...subscription, endpoint: "https://example.test/secret" }),
+        /Unsupported push endpoint/,
+      );
+      await denied(() => push("status", {}, other), /Sign in again/);
+      await denied(
+        () => asRole("authenticated", recipient.id, "select public.brushy_push_work()"),
+        /permission denied/,
+      );
+      await denied(
+        () => asRole("authenticated", recipient.id, "select * from brushy_private.push_devices"),
+        /permission denied/,
+      );
+      assert.deepEqual(await push("attach", subscription), { attached: true, enabled: [] });
+      await denied(() => push("attach", subscription, other, otherSession), /Reset this device/);
+      await push("detach", { endpoint }, other, otherSession);
+      assert.equal((await push("status", { endpoint })).attached, true);
+
+      await push("set_preference", { kind: "request", enabled: true });
+      const first = await request(sender, recipient);
+      const work = () =>
+        asRole<{ event_id: string; device_id: string }>(
+          "service_role",
+          null,
+          "select * from public.brushy_push_work()",
+        );
+      const take = ({ event_id, device_id }: { event_id: string; device_id: string }) =>
+        asRole<{ value: { kind: string; endpoint: string } | null }>(
+          "service_role",
+          null,
+          "select public.brushy_push_take($1,$2) value",
+          [event_id, device_id],
+        );
+      const pending = (await work()).rows[0]!;
+      assert.ok(pending);
+      assert.equal((await take(pending)).rows[0]?.value?.endpoint, endpoint);
+      assert.equal((await take(pending)).rows[0]?.value, null);
+      await rpc(recipient.id, "respond", { request_id: first.id, accept: false });
+      await request(sender, recipient);
+      assert.equal(
+        (await work()).rows.length,
+        0,
+        "same pair cannot alert twice on the recipient's day",
+      );
+      const pendingFromOther = await request(other, recipient);
+      const otherWork = (await work()).rows[0]!;
+      assert.ok(otherWork);
+      await rpc(recipient.id, "respond", { request_id: pendingFromOther.id, accept: true });
+      assert.equal((await take(otherWork)).rows[0]?.value, null, "dispatch rechecks pending state");
+
+      await push("set_preference", { kind: "heart", enabled: true });
+      const slot = brushingSlot(new Date(), "UTC");
+      const heart = (target: Saved, hearted = true) =>
+        rpc(other.id, "set_heart", { ...target, hearted });
+      const selfie = await save(recipient.id, { ...slot, audience: "all_friends" });
+      await heart(selfie);
+      const originalHeart = (await work()).rows[0]!;
+      assert.ok(originalHeart);
+      await heart(selfie, false);
+      await heart(selfie);
+      assert.equal(
+        (await take(originalHeart)).rows[0]?.value,
+        null,
+        "reheart cannot resurrect a removed event",
+      );
+      const replacement = await save(recipient.id, { ...slot, audience: "all_friends" });
+      await heart(replacement);
+      const newHeart = (await work()).rows[0]!;
+      assert.ok(newHeart);
+      await push("set_preference", { kind: "heart", enabled: false });
+      await push("set_preference", { kind: "heart", enabled: true });
+      assert.equal(
+        (await take(newHeart)).rows[0]?.value,
+        null,
+        "opt-in does not replay old events",
+      );
+
+      await push("set_preference", { kind: "reminder", enabled: true });
+      await db.query(
+        "update brushy_private.push_preferences set enabled_since = '2026-03-01' where kind = 'reminder'",
+      );
+      await db.query(
+        "update brushy_private.push_devices set added_at = '2026-03-01' where user_id = $1",
+        [recipient.id],
+      );
+      await db.query(
+        "update brushy_private.profiles set time_zone = 'America/Los_Angeles' where id = $1",
+        [recipient.id],
+      );
+      const queue = (at: string) => db.query("select brushy_private.queue_reminders($1)", [at]);
+      const reminders = () =>
+        db.query<{ day: string; slot: string; ttl: number }>(
+          "select day::text,slot,extract(epoch from expires_at-event_at)::integer ttl from brushy_private.push_events where kind = 'reminder' order by day,slot",
+        );
+      await db.query("insert into brushy_private.recorded_slots values ($1,'2026-03-08','am')", [
+        recipient.id,
+      ]);
+      await queue("2026-03-08T17:00:00Z");
+      await queue("2026-03-09T04:14:59Z");
+      await queue("2026-03-09T04:15:00Z");
+      await queue("2026-03-09T17:15:01Z");
+      assert.deepEqual((await reminders()).rows, [{ day: "2026-03-08", slot: "pm", ttl: 1800 }]);
+      await db.query(
+        "update brushy_private.push_preferences set enabled_since = '2026-03-10T17:01:00Z' where kind = 'reminder'",
+      );
+      await queue("2026-03-10T17:02:00Z");
+      assert.equal((await reminders()).rows.length, 1, "late opt-in cannot catch up");
+      assert.equal(
+        (
+          await db.query(
+            "select 1 from brushy_private.recorded_slots where user_id = $1 and day = '2025-01-01'",
+            [legacyOwner],
+          )
+        ).rows.length,
+        1,
+      );
+      await asRole("authenticated", recipient.id, "delete from public.brushings where id = $1", [
+        replacement.id,
+      ]);
+      assert.equal(
+        (
+          await db.query(
+            "select 1 from brushy_private.recorded_slots where user_id = $1 and day = $2 and slot = $3",
+            [recipient.id, slot.local_date, slot.slot],
+          )
+        ).rows.length,
+        1,
+        "delete preserves reminder suppression",
+      );
+
+      await db.query("delete from auth.sessions where id = $1", [session]);
+      await work();
+      assert.equal(
+        (
+          await db.query("select 1 from brushy_private.push_devices where user_id = $1", [
+            recipient.id,
+          ])
+        ).rows.length,
+        0,
+      );
     },
   );
 
