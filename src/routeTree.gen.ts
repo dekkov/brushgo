@@ -17,6 +17,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as FriendsIndexRouteImport } from './routes/friends.index'
 import { Route as FriendsUserIdRouteImport } from './routes/friends.$userId'
 import { Route as ApiSelfiesIdRouteImport } from './routes/api.selfies.$id'
+import { Route as SelfieIdRevisionRouteImport } from './routes/selfie.$id.$revision'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -58,6 +59,11 @@ const ApiSelfiesIdRoute = ApiSelfiesIdRouteImport.update({
   path: '/api/selfies/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SelfieIdRevisionRoute = SelfieIdRevisionRouteImport.update({
+  id: '/selfie/$id/$revision',
+  path: '/selfie/$id/$revision',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -68,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/friends/$userId': typeof FriendsUserIdRoute
   '/friends/': typeof FriendsIndexRoute
   '/api/selfies/$id': typeof ApiSelfiesIdRoute
+  '/selfie/$id/$revision': typeof SelfieIdRevisionRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/friends/$userId': typeof FriendsUserIdRoute
   '/friends': typeof FriendsIndexRoute
   '/api/selfies/$id': typeof ApiSelfiesIdRoute
+  '/selfie/$id/$revision': typeof SelfieIdRevisionRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/friends/$userId': typeof FriendsUserIdRoute
   '/friends/': typeof FriendsIndexRoute
   '/api/selfies/$id': typeof ApiSelfiesIdRoute
+  '/selfie/$id/$revision': typeof SelfieIdRevisionRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/friends/$userId'
     | '/friends/'
     | '/api/selfies/$id'
+    | '/selfie/$id/$revision'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -109,6 +119,7 @@ export interface FileRouteTypes {
     | '/friends/$userId'
     | '/friends'
     | '/api/selfies/$id'
+    | '/selfie/$id/$revision'
   id:
     | '__root__'
     | '/'
@@ -119,6 +130,7 @@ export interface FileRouteTypes {
     | '/friends/$userId'
     | '/friends/'
     | '/api/selfies/$id'
+    | '/selfie/$id/$revision'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   FriendsRoute: typeof FriendsRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   ApiSelfiesIdRoute: typeof ApiSelfiesIdRoute
+  SelfieIdRevisionRoute: typeof SelfieIdRevisionRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -188,6 +201,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSelfiesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/selfie/$id/$revision': {
+      id: '/selfie/$id/$revision'
+      path: '/selfie/$id/$revision'
+      fullPath: '/selfie/$id/$revision'
+      preLoaderRoute: typeof SelfieIdRevisionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -211,6 +231,7 @@ const rootRouteChildren: RootRouteChildren = {
   FriendsRoute: FriendsRouteWithChildren,
   SettingsRoute: SettingsRoute,
   ApiSelfiesIdRoute: ApiSelfiesIdRoute,
+  SelfieIdRevisionRoute: SelfieIdRevisionRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

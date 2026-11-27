@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
+import { NotificationSettings } from "@/components/NotificationSettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
@@ -77,6 +78,7 @@ function Settings() {
               in {settings.time_zone}.
             </p>
           )}
+          <NotificationSettings key={user?.id} />
           <label htmlFor="check-in-time-zone">Account time zone</label>
           <Input
             id="check-in-time-zone"

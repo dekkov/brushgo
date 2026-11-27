@@ -47,8 +47,9 @@ Install Node.js and dependencies, copy `.env.example` to `.env.local`, configure
 | `S3_SELFIES_BUCKET` | Private S3 bucket name |
 | `AWS_ACCESS_KEY_ID` | Server-only IAM access key ID |
 | `AWS_SECRET_ACCESS_KEY` | Server-only IAM secret access key |
+| `VITE_WEB_PUSH_PUBLIC_KEY` | Optional public VAPID key to show Web Push settings |
 
-Supabase secret/service-role keys are not needed. Store AWS credentials in Vercel's sensitive environment variables, not in Git or client-side variables.
+The web app does not need a Supabase secret/service-role key. The optional push dispatcher uses the key provided only inside Supabase Edge Functions. Store AWS credentials in Vercel's sensitive environment variables, not in Git or client-side variables.
 
 ## Setup and deployment
 
@@ -87,7 +88,13 @@ Choose a display name in **Friends**, then share a reusable invite link/code. An
 
 Every new selfie has an audience: **Only me**, **All friends**, or **Selected friends**. Brushy remembers your last choice, initially Only me. All friends includes future friends and your past All friends selfies. Selected friends refers to those specific friendships: removing and re-adding a person does not restore selected-only access. Saved audiences cannot be edited; retaking the same morning/evening slot replaces that selfie with a new capture, audience, and feed position. Existing photos remain private when the SQL is applied.
 
-The home feed combines your own selfies and friends' authorized selfies. Friend profiles show their shared history; the personal calendar is unchanged. Names use initials avatars, and a friend's current overall streak includes private check-ins without revealing their details. You can add or remove a heart on a friend's shared selfie. Its owner and authorized viewers see the count and names. Retaking or deleting the selfie removes its hearts; losing access removes your heart even if you regain access later. The feed refreshes on opening, on return, or when you tap Refresh. There is no realtime feed, offline queue, chat, push notification, or widget.
+The home feed combines your own selfies and friends' authorized selfies. Friend profiles show their shared history; the personal calendar is unchanged. Names use initials avatars, and a friend's current overall streak includes private check-ins without revealing their details. You can add or remove a heart on a friend's shared selfie. Its owner and authorized viewers see the count and names. Retaking or deleting the selfie removes its hearts; losing access removes your heart even if you regain access later. The feed refreshes on opening, on return, or when you tap Refresh.
+
+## Notifications
+
+In **Settings → Notifications**, choose which alerts you want, then enable each device separately. Optional alerts cover missed check-ins (10 AM and 9 PM in your account time zone), incoming friend requests, and hearts on your selfies. They don't include names, photos, or streaks, and delivery is best-effort. On iPhone and iPad, use Brushy from the Home Screen. The in-app check-in prompts work without push.
+
+For owners, see [Web Push deployment](docs/sql/web-push-deployment.md).
 
 Removing or blocking someone ends new access to their shared photos. Blocking also prevents requests; unblocking does not restore friendship. Photos in the shared feed are fetched with the current session and streamed through Brushy's server with `private, no-store` headers, not sent as reusable S3 URLs. This adds server bandwidth/S3 reads. Previously seen images or screenshots cannot be recalled. The service worker never caches photo responses.
 

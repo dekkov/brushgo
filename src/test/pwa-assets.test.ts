@@ -25,13 +25,17 @@ function worker() {
   const fetch = vi.fn().mockRejectedValue(new Error("offline"));
   const skipWaiting = vi.fn();
   const claim = vi.fn();
+  const showNotification = vi.fn().mockResolvedValue(undefined);
+  const matchAll = vi.fn().mockResolvedValue([]);
+  const openWindow = vi.fn().mockResolvedValue(undefined);
   runInNewContext(workerSource, {
     self: {
       location: { origin: "https://brushy.example" },
       addEventListener: (name: string, handler: (event: unknown) => void) =>
         listeners.set(name, handler),
       skipWaiting,
-      clients: { claim },
+      clients: { claim, matchAll, openWindow },
+      registration: { showNotification },
     },
     caches,
     fetch,
@@ -67,8 +71,68 @@ function worker() {
     });
     return respondWith;
   }
-  return { listeners, cache, caches, fetch, fallback, skipWaiting, claim, navigate };
+  return {
+    listeners,
+    cache,
+    caches,
+    fetch,
+    fallback,
+    skipWaiting,
+    claim,
+    navigate,
+    showNotification,
+    matchAll,
+    openWindow,
+  };
 }
+
+describe("Web Push worker", () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const revision = "22222222-2222-4222-8222-222222222222";
+  it.each([
+    ["reminder", "/capture"],
+    ["request", "/friends"],
+    ["heart", `/selfie/${id}/${revision}`],
+  ])("shows generic %s copy and opens only its app destination", async (kind, path) => {
+    const w = worker();
+    const waitUntil = vi.fn();
+    w.listeners.get("push")!({
+      waitUntil,
+      data: { json: () => ({ kind, target: id, revision, body: "Private name" }) },
+    });
+    await waitUntil.mock.calls[0]![0];
+    expect(w.showNotification).toHaveBeenCalledOnce();
+    const [title, options] = w.showNotification.mock.calls[0]!;
+    expect(title).toBe("Brushy");
+    expect(options.body).not.toContain("Private name");
+    expect(options.data).toEqual({ path });
+    expect(options.image).toBeUndefined();
+    const close = vi.fn();
+    w.listeners.get("notificationclick")!({
+      waitUntil,
+      notification: { close, data: options.data },
+    });
+    await waitUntil.mock.calls[1]![0];
+    expect(close).toHaveBeenCalledOnce();
+    expect(w.openWindow).toHaveBeenCalledWith(`https://brushy.example${path}`);
+  });
+
+  it("ignores malformed deliveries and non-app click targets", async () => {
+    const w = worker();
+    const waitUntil = vi.fn();
+    w.listeners.get("push")!({
+      waitUntil,
+      data: { json: () => ({ kind: "heart", target: "../friends", revision }) },
+    });
+    await waitUntil.mock.calls[0]![0];
+    expect(w.showNotification).not.toHaveBeenCalled();
+    w.listeners.get("notificationclick")!({
+      waitUntil,
+      notification: { close: vi.fn(), data: { path: "https://example.test/" } },
+    });
+    expect(w.openWindow).not.toHaveBeenCalled();
+  });
+});
 
 describe("PWA assets", () => {
   it("has standalone Brushy metadata and valid PNG icon sizes", () => {
@@ -136,6 +200,7 @@ describe("offline worker", () => {
     "/capture",
     "/friends",
     "/settings",
+    "/selfie/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222",
     "/friends/11111111-1111-4111-8111-111111111111",
   ])("falls back for a failed app navigation to %s", async (path) => {
     const w = worker();

@@ -1,12 +1,33 @@
 import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { CalendarDays, Home, LogOut, Settings, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { AuthCard } from "./AuthCard";
+import { disableDeviceNotifications } from "@/lib/push-device";
+import { toast } from "sonner";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+  const [leaving, setLeaving] = useState(false);
+  async function signOut() {
+    setLeaving(true);
+    try {
+      await disableDeviceNotifications();
+    } catch (error) {
+      // The subscription cleanup also runs locally; sign-out invalidates the session on the sender.
+      console.error("Could not fully detach notifications before sign-out", error);
+    }
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch (error) {
+      console.error("Could not sign out", error);
+      toast.error("Could not sign out. Please try again.");
+    } finally {
+      setLeaving(false);
+    }
+  }
   if (loading) return <div className="min-h-screen" />;
   if (!user)
     return (
@@ -64,7 +85,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Settings className="h-5 w-5" />
           </Link>
           <button
-            onClick={() => supabase.auth.signOut()}
+            onClick={() => void signOut()}
+            disabled={leaving}
             className="rounded-full p-2 text-muted-foreground hover:bg-secondary"
             aria-label="Sign out"
           >
